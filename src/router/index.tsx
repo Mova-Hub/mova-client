@@ -13,6 +13,8 @@ import ReservationsMapPage from "@/app/pages/ReservationsMap"
 
 const Overview = React.lazy(() => import("@/app/pages/Overview"))
 const Reservations = React.lazy(() => import("@/app/pages/Reservations"))
+const Clients = React.lazy(() => import("@/app/pages/Clients"))
+const Orders = React.lazy(() => import("@/app/pages/Orders"))
 const Buses = React.lazy(() => import("@/app/pages/Buses"))
 const People = React.lazy(() => import("@/app/pages/People"))
 const Staff = React.lazy(() => import("@/app/pages/Staff"))
@@ -82,6 +84,8 @@ export const router = createBrowserRouter([
               // THIS is the only index route now
               { index: true, element: <LandingRedirect /> },
 
+              { path: "clients", element: withSuspense(<Clients />) },
+              { path: "orders", element: withSuspense(<Orders />) },
               { path: "reservations", element: withSuspense(<Reservations />) },
               { path: "buses", element: withSuspense(<Buses />) },
               { path: "notifications", element: withSuspense(<Notifications />) },

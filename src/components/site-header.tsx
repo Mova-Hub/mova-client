@@ -22,6 +22,8 @@ type Tab = { to: string; label: string }
 const ALL_TABS: readonly Tab[] = [
   { to: "/buses", label: "Bus" },
   { to: "/people", label: "Chauffeurs & Propriétaires" }, // admin-only
+  { to: "/clients", label: "Clients" }, 
+  { to: "/orders", label: "Commandes" }, 
   { to: "/reservations", label: "Locations" },
   { to: "/staff", label: "Staff" }, // admin-only
 ] as const
