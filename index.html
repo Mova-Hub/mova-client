@@ -1,14 +1,57 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!-- Basic -->
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/assets/images/logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mova Manager</title>
-    <link href="/src/index.css" rel="stylesheet">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- Viewport -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <!-- Title -->
+    <title>Mova Manager - Smart Mobility Management</title>
+
+    <!-- SEO -->
+    <meta
+      name="description"
+      content="Mova Manager is a smart mobility management platform designed to streamline bus operations, event transportation, and real-time fleet coordination."
+    />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Favicon & App Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/images/logo.png" />
+    <link rel="apple-touch-icon" href="/assets/images/logo.png" />
+
+    <!-- Theme Color (Mobile browsers / PWA) -->
+    <meta name="theme-color" content="#1FAE5A" />
+
+    <!-- Fonts (example – adjust if needed) -->
+    <!--
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    -->
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/src/index.css" />
+
+    <!-- Prevent Flash of Unstyled Content -->
+    <style>
+      body {
+        margin: 0;
+        background-color: #ffffff;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, "Helvetica Neue", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+    </style>
   </head>
+
   <body>
+    <!-- App Root -->
     <div id="root"></div>
+
+    <!-- Main Entry -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
