@@ -55,7 +55,7 @@ export default function ClientsPage() {
   const columns = React.useMemo<ColumnDef<Client>[]>(() => [
     makeDrawerTriggerColumn<Client>("name", {
       triggerField: "name",
-      headerLabel: "Client",
+      // headerLabel: "Client",
       renderTrigger: (c) => (
         <div className="flex flex-col">
           <span className="font-medium">{c.name}</span>
