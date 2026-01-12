@@ -148,10 +148,10 @@ function ProcessOrderDialog({
                 <p className="font-medium">{order.contactName}</p>
                 <p>{order.contactPhone}</p>
                 <div className="flex gap-2 mt-2">
-                  <Button size="xs" variant="outline" asChild>
+                  <Button size="sm" variant="outline" asChild>
                     <a href={`tel:${order.contactPhone}`}><IconPhone className="w-3 h-3 mr-1" /> Appeler</a>
                   </Button>
-                  <Button size="xs" variant="outline" className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100" asChild>
+                  <Button size="sm" variant="outline" className="text-green-600 border-green-200 bg-green-50 hover:bg-green-100" asChild>
                     <a href={`https://wa.me/${order.contactPhone.replace(/\+/g, '')}`} target="_blank" rel="noreferrer">
                       <IconMessageCircle className="w-3 h-3 mr-1" /> WhatsApp
                     </a>

@@ -122,6 +122,10 @@ export type DataTableProps<T extends object> = {
   onDeleteSelected?: (rows: T[]) => void
   /** show loading empty state */
   loading?: boolean
+  rowCount?: number
+  pagination?: { pageIndex: number; pageSize: number }
+  onPaginationChange?: (pagination: { pageIndex: number; pageSize: number }) => void
+  onRowClick?: (row: T) => void
 }
 
 /* -------------------------- Safe label/value helpers ------------------------- */
