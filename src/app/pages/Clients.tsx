@@ -17,6 +17,7 @@ import { makeDrawerTriggerColumn } from "@/components/data-table-helpers"
 
 import clientApi, { type Client } from "@/api/client"
 import { ApiError } from "@/api/apiService"
+import { ClientDetailsDialog } from "@/components/clients/ClientDetailsDialog"
 
 function showValidationErrors(err: unknown) {
   const e = err as ApiError
@@ -27,6 +28,9 @@ export default function ClientsPage() {
   const [rows, setRows] = React.useState<Client[]>([])
   const [loading, setLoading] = React.useState<boolean>(true)
   const [total, setTotal] = React.useState(0)
+
+  const [selectedClient, setSelectedClient] = React.useState<Client | null>(null)
+  const [detailOpen, setDetailOpen] = React.useState(false)
 
   // Basic server-side pagination state
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 20 })
@@ -105,10 +109,13 @@ export default function ClientsPage() {
     },
   ], [])
 
-  /* ---------------- Actions ---------------- */
+/* ---------------- Actions ---------------- */
   function renderRowActions(client: Client) {
     return (
-      <DropdownMenuItem onClick={() => toast("Fonctionnalité Vue détaillée à venir")}>
+      <DropdownMenuItem onClick={() => {
+        setSelectedClient(client)
+        setDetailOpen(true)
+      }}>
         <IconEye className="mr-2 h-4 w-4" /> Voir détails
       </DropdownMenuItem>
     )
@@ -135,6 +142,13 @@ export default function ClientsPage() {
         getRowId={(r) => r.id}
         searchable={{ placeholder: "Rechercher par nom ou téléphone...", fields: ["name", "phone"] }}
         renderRowActions={renderRowActions}
+      />
+
+      {/* Client Details Dialog Component */}
+      <ClientDetailsDialog
+        client={selectedClient} 
+        open={detailOpen} 
+        onOpenChange={setDetailOpen} 
       />
     </div>
   )

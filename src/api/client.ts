@@ -8,6 +8,7 @@ export type ClientDto = {
   name: string
   phone: string
   email?: string | null
+  avatar_url?: string | null
   last_login_at?: string | null
   created_at?: string
   orders_count?: number
@@ -36,6 +37,7 @@ export type Client = {
   name: string
   phone: string
   email?: string
+  avatar?: string
   lastLoginAt?: string
   createdAt?: string
   ordersCount?: number
@@ -47,6 +49,7 @@ export function toClient(dto: ClientDto): Client {
     name: dto.name,
     phone: dto.phone,
     email: dto.email ?? undefined,
+    avatar: dto.avatar_url ?? undefined,
     lastLoginAt: dto.last_login_at ?? undefined,
     createdAt: dto.created_at,
     ordersCount: dto.orders_count ?? 0,

@@ -51,6 +51,12 @@ export type Order = {
   client?: Client
 }
 
+export type ConvertPayload = {
+  price_total: number
+  bus_ids: string[]
+  internal_notes?: string
+}
+
 export function toOrder(dto: OrderDto): Order {
   return {
     id: String(dto.id),
@@ -97,8 +103,9 @@ async function update(id: string | number, payload: { status?: OrderStatus, inte
   return { data: toOrder(res.data.order), message: res.data.message }
 }
 
-async function convertToReservation(id: string | number) {
-  const res = await api.post<{ status: boolean, message: string }>(`/orders/${id}/convert`, {})
+async function convertToReservation(id: string | number, payload: ConvertPayload) {
+  // Matches OrderController@convertToReservation validation
+  const res = await api.post<{ status: boolean, message: string }>(`/orders/${id}/convert`, payload)
   return res.data
 }
 
