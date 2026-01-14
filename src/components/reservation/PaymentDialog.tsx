@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { toast } from "sonner"
-import { IconCash, IconCheck, IconCreditCard, IconBuildingBank, IconDeviceMobile } from "@tabler/icons-react"
+import { IconCash, IconCheck, IconCreditCard, IconBuildingBank, IconDeviceMobile, IconReceipt } from "@tabler/icons-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -38,12 +38,14 @@ export function PaymentDialog({ open, onOpenChange, reservation, onSuccess }: Pr
   const [loading, setLoading] = React.useState(false)
   const [amount, setAmount] = React.useState<number>(0)
   const [method, setMethod] = React.useState<string>("cash")
+  const [reference, setReference] = React.useState("")
   const [note, setNote] = React.useState("")
 
   React.useEffect(() => {
     if (reservation) {
       setAmount(reservation.priceTotal ?? 0)
       setMethod("cash")
+      setReference("")
       setNote("")
     }
   }, [reservation, open])
@@ -51,12 +53,18 @@ export function PaymentDialog({ open, onOpenChange, reservation, onSuccess }: Pr
   const handleSubmit = async () => {
     if (!reservation) return
     if (amount <= 0) return toast.error("Le montant doit être positif.")
+    
+    // Check for reference if not cash
+    if (method !== 'cash' && !reference.trim()) {
+        return toast.error("La référence est obligatoire pour ce mode de paiement.")
+    }
 
     setLoading(true)
     try {
       await reservationApi.recordPayment(reservation.id, {
         amount,
         method,
+        reference: reference || undefined, // Send undefined if empty (only allowed for cash via backend rules)
         note
       })
       toast.success("Paiement enregistré avec succès.")
@@ -118,10 +126,28 @@ export function PaymentDialog({ open, onOpenChange, reservation, onSuccess }: Pr
             </Select>
           </div>
 
+          {/* Conditional Reference Input */}
+          {method !== 'cash' && (
+              <div className="grid gap-2 animate-in fade-in slide-in-from-top-2">
+                <Label className="flex items-center gap-2">
+                    ID Transaction / Référence <span className="text-red-500">*</span>
+                </Label>
+                <div className="relative">
+                    <IconReceipt className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                        placeholder="Ex: MPESA-X89S9..." 
+                        value={reference} 
+                        onChange={(e) => setReference(e.target.value)} 
+                        className="pl-9 border-emerald-500/50 focus-visible:ring-emerald-500"
+                    />
+                </div>
+              </div>
+          )}
+
           <div className="grid gap-2">
-            <Label>Référence / Notes (Optionnel)</Label>
+            <Label>Notes (Optionnel)</Label>
             <Textarea 
-              placeholder="Ex: ID transaction, Nom du déposant..." 
+              placeholder="Ex: Nom du déposant..." 
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
