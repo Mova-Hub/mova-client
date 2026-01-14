@@ -15,9 +15,8 @@ import type { FilterConfig, GroupByConfig } from "@/components/data-table"
 
 import ImportDialog from "@/components/common/ImportDialog"
 import AddEditReservationDialog from "@/components/reservation/AddEditReservation"
-import { PaymentDialog } from "@/components/reservation/PaymentDialog" // Imported
+import { PaymentDialog } from "@/components/reservation/PaymentDialog"
 
-// API clients
 import reservationApi, { type UIReservation, type ReservationStatus, type ReservationPaymentStatus } from "@/api/reservation"
 import busApi, { type UIBus } from "@/api/bus"
 import { Button } from "@/components/ui/button"
@@ -26,9 +25,7 @@ import { MapIcon } from "lucide-react"
 
 /* ------------------------------- i18n helpers ------------------------------ */
 
-// ... (EventType and EVENT_LABELS remain the same, ommitted for brevity if unchanged) ...
-// Ensure you keep EVENT_LABELS and EventType types here as before.
-type EventType = string // Simplified for display, real type in reservation.ts
+type EventType = string 
 
 const STATUS_LABELS: Record<ReservationStatus, string> = {
   pending: "En attente",
@@ -43,21 +40,46 @@ const PAYMENT_LABELS: Record<ReservationPaymentStatus, string> = {
   refunded: "Remboursé",
 }
 
-// ... (EVENT_LABELS definition from your code) ...
 const EVENT_LABELS: Record<string, string> = {
   none: "Aucun",
   school_trip: "Sortie scolaire",
-  // ... rest of your event labels
+  university_trip: "Voyage universitaire",
+  educational_tour: "Visite pédagogique",
+  student_transport: "Transport d’étudiants",
+  wedding: "Mariage",
+  funeral: "Funérailles",
+  birthday: "Anniversaire",
+  baptism: "Baptême",
+  family_meeting: "Retrouvailles familiales",
+  conference: "Conférence",
+  seminar: "Séminaire",
+  company_trip: "Voyage d’entreprise",
+  business_mission: "Mission professionnelle",
+  staff_shuttle: "Navette du personnel",
+  football_match: "Match de football",
+  sports_tournament: "Tournoi sportif",
+  concert: "Concert",
+  festival: "Festival",
+  school_competition: "Compétition scolaire",
+  tourist_trip: "Voyage touristique",
+  group_excursion: "Excursion de groupe",
+  pilgrimage: "Pèlerinage",
+  site_visit: "Visite de site",
+  airport_transfer: "Transfert aéroport",
+  election_campaign: "Campagne électorale",
+  administrative_mission: "Mission administrative",
+  official_trip: "Voyage officiel",
+  private_transport: "Transport privé",
+  special_event: "Événement spécial",
   simple_rental: "Location simple",
 }
 
 const frStatus = (s?: ReservationStatus | null) => (s ? (STATUS_LABELS[s] ?? s) : "—")
 const frEvent = (e?: string | null) => (e ? (EVENT_LABELS[e] ?? e) : "—")
-const frPayment = (p?: ReservationPaymentStatus | null) => 
-  p ? (PAYMENT_LABELS[p] ?? p) : "En attente" // Ou "—"
+const frPayment = (p?: ReservationPaymentStatus | null) => p ? (PAYMENT_LABELS[p] ?? p) : "—"
 
 /* ------------------------------- date utils -------------------------------- */
-// ... (parseSmartDate, fmtMoney, friendlyDateTime, etc. remain the same) ...
+
 function parseSmartDate(input?: string): Date | null {
   if (!input) return null
   const s = input.trim()
@@ -90,7 +112,7 @@ const shortDatetime = (iso?: string) => {
 }
 
 /* ------------------------------- update helpers ------------------------------ */
-// ... (pruneUndefined, serializeReservationForUpdate remain the same) ...
+
 function pruneUndefined<T extends object>(obj: T): Partial<T> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>
 }
@@ -180,7 +202,6 @@ export default function ReservationPage() {
         { label: PAYMENT_LABELS.failed, value: "failed" },
         { label: PAYMENT_LABELS.refunded, value: "refunded" },
       ],
-      // Correct accessor for filter
       accessor: (r) => r.paymentStatus ?? "pending",
       defaultValue: "",
     },
@@ -282,14 +303,14 @@ export default function ReservationPage() {
       <>
         <DropdownMenuItem onClick={() => { setEditing(r); setOpen(true) }}>Modifier</DropdownMenuItem>
         
-        {/* NEW Payment Action */}
+        {/* Encaisser (Hidden if Paid or Cancelled) */}
         {r.paymentStatus !== 'paid' && !isCancelled && (
             <DropdownMenuItem onClick={() => { setPaymentTarget(r); setPaymentOpen(true) }}>
-                <IconCash className="w-4 h-4 mr-2" /> Encaisser
+                <IconCash className="w-4 h-4 mr-2 text-emerald-600" /> Encaisser
             </DropdownMenuItem>
         )}
 
-        {!isCancelled && (
+        {r.paymentStatus !== 'paid' && !isCancelled && (
           <DropdownMenuItem onClick={async () => {
             const prev = rows
             setRows((xs) => xs.map((x) => (x.id === r.id ? { ...x, status: "cancelled" } : x)))
@@ -301,10 +322,12 @@ export default function ReservationPage() {
               setRows(prev)
               toast.error(e?.message ?? "Échec de l’annulation.")
             }
-          }}>Annuler</DropdownMenuItem>
+          }}>Annuler
+          </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-rose-600" onClick={async () => {
+
+        {/* <DropdownMenuItem className="text-rose-600" onClick={async () => {
           const prev = rows
           setRows((xs) => xs.filter((x) => x.id !== r.id))
           try {
@@ -315,7 +338,8 @@ export default function ReservationPage() {
             setRows(prev)
             toast.error(e?.message ?? "Échec de la suppression.")
           }
-        }}>Supprimer</DropdownMenuItem>
+        }}>Supprimer
+        </DropdownMenuItem> */}
       </>
     )
   }
@@ -433,7 +457,6 @@ export default function ReservationPage() {
         ]}
         sampleHeaders={["code","tripDate","from","to","passenger_name","passenger_phone","passenger_email","seats","busIds","priceTotal","status"]}
         transform={(raw) => {
-          // ... (same logic as before) ...
           const g = (k: string) => {
             switch (k) {
               case "route.from": return raw["route.from"] ?? raw["from"]

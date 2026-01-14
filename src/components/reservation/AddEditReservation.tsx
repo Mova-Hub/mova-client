@@ -321,7 +321,7 @@ export function EventCombobox({ value, onChange }: { value: ReservationEvent; on
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild><Button variant="outline" role="combobox" className="w-full justify-between"><span className="truncate">{current ? current.label : "Choisir..."}</span><ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" /></Button></PopoverTrigger>
       <PopoverContent className="p-0"><Command><CommandInput placeholder="Type d'événement..." /><CommandList><CommandEmpty>Rien trouvé.</CommandEmpty><CommandGroup>
-        {EVENT_OPTIONS.map((opt) => <CommandItem key={opt.value} value={opt.label} onSelect={() => { onChange(opt.value); setOpen(false) }}><span>{opt.label}</span>{opt.value === value && <Check className="ml-auto h-4 w-4" />}</CommandItem>)}
+        {EVENT_OPTIONS.map((opt) => <CommandItem key={opt.value} value={opt.label} onSelect={() => { onChange(opt.value as ReservationEvent); setOpen(false) }}><span>{opt.label}</span>{opt.value === value && <Check className="ml-auto h-4 w-4" />}</CommandItem>)}
       </CommandGroup></CommandList></Command></PopoverContent>
     </Popover>
   )
