@@ -4,6 +4,9 @@ import api, { buildQuery } from "@/api/apiService"
 /* ------------------------------- Server DTOs ------------------------------- */
 
 export type ReservationStatus = "pending" | "confirmed" | "cancelled"
+
+export type ReservationPaymentStatus = "pending" | "paid" | "failed" | "refunded"
+
 export type ReservationEvent =
   | "none" | "school_trip" | "university_trip" | "educational_tour" | "student_transport"
   | "wedding" | "funeral" | "birthday" | "baptism" | "family_meeting"
@@ -22,7 +25,7 @@ export type WaypointDto = {
 export type ReservationDto = {
   id: string // uuid
   code?: string | null
-  trip_date: string // ISO-8601 datetime (e.g. 2025-03-01T09:30:00+01:00)
+  trip_date: string // ISO-8601
   from_location: string
   to_location: string
 
@@ -32,6 +35,7 @@ export type ReservationDto = {
     email?: string | null
   } | null
 
+  // Flattened fallbacks
   passenger_name?: string | null
   passenger_phone?: string | null
   passenger_email?: string | null
@@ -39,13 +43,12 @@ export type ReservationDto = {
   seats: number
   price_total?: number | null
   status?: ReservationStatus | null
-
+  payment_status?: ReservationPaymentStatus | null
   event?: ReservationEvent | null
 
   waypoints?: WaypointDto[] | null
   distance_km?: number | null
 
-  // Bus id now integer in DB, but the serializer could still stringify.
   buses?: Array<{
     id: number | string
     plate?: string | null
@@ -59,7 +62,6 @@ export type ReservationDto = {
   deleted_at?: string | null
 }
 
-/** Typical Laravel paginator */
 export type Paginated<T> = {
   data: T[]
   meta?: {
@@ -74,32 +76,32 @@ export type Paginated<T> = {
 
 export type UIRoute = { from: string; to: string }
 export type UIPassenger = { name: string; phone: string; email?: string }
-export type UIWaypoint = { lat: number; lng: number; label?: string }
+export type UIWaypoint = { lat: number; lng: number; label: string }
 
 export type UIReservation = {
   id: string
   code?: string
-  /** Full ISO-8601 datetime (e.g. 2025-03-01T09:30:00+01:00) */
   tripDate: string
   route: UIRoute
   passenger: UIPassenger
   seats: number
-  priceTotal?: number
-  status?: ReservationStatus
-  event?: ReservationEvent
-  waypoints?: UIWaypoint[]
-  distanceKm?: number
-  /** Frontend may keep them as strings; we'll coerce to integers in payload. */
-  busIds?: Array<string | number>
+  priceTotal: number
+  status: ReservationStatus
+  paymentStatus?: ReservationPaymentStatus
+  event: ReservationEvent
+  waypoints: UIWaypoint[]
+  distanceKm: number
+  busIds: string[]
   createdAt?: string
   updatedAt?: string
   deletedAt?: string | null
 }
 
+type PartialUIReservation = Partial<UIReservation>
+
 /* ------------------------------ Transforming ------------------------------ */
 
 export function toUIReservation(r: ReservationDto): UIReservation {
-  // Prefer nested passenger if provided; fall back to flattened fields otherwise.
   const nested = r.passenger ?? null
   const name = nested?.name ?? r.passenger_name ?? ""
   const phone = nested?.phone ?? r.passenger_phone ?? ""
@@ -108,163 +110,124 @@ export function toUIReservation(r: ReservationDto): UIReservation {
   return {
     id: String(r.id),
     code: r.code ?? undefined,
-    tripDate: r.trip_date, // full ISO datetime from backend
-    route: { from: r.from_location, to: r.to_location },
-    passenger: {
-      name: name ?? "",
-      phone: phone ?? "",
-      email: email ?? undefined,
+    tripDate: r.trip_date,
+    route: { 
+      from: r.from_location ?? "Départ inconnu", 
+      to: r.to_location ?? "Arrivée inconnue" 
     },
+    passenger: { name, phone, email },
     seats: Number(r.seats ?? 0),
-    priceTotal: r.price_total ?? undefined,
-    status: (r.status ?? undefined) as ReservationStatus | undefined,
-    event: (r.event ?? undefined) as ReservationEvent | undefined,
-    waypoints:
-      r.waypoints?.map(w => ({
-        lat: Number(w.lat),
-        lng: Number(w.lng),
-        label: w.label ?? undefined,
-      })) ?? undefined,
-    distanceKm: r.distance_km ?? undefined,
-    busIds: r.buses?.map(b => (typeof b.id === "number" ? b.id : String(b.id))) ?? undefined,
+    priceTotal: Number(r.price_total ?? 0),
+    status: (r.status as ReservationStatus) ?? "pending",
+    paymentStatus: (r.payment_status as ReservationPaymentStatus) ?? undefined,
+    event: (r.event as ReservationEvent) ?? "none",
+    waypoints: Array.isArray(r.waypoints) 
+      ? r.waypoints.map(w => ({
+          lat: Number(w.lat),
+          lng: Number(w.lng),
+          label: w.label ?? ""
+        }))
+      : [],
+    distanceKm: Number(r.distance_km ?? 0),
+    busIds: Array.isArray(r.buses) ? r.buses.map(b => String(b.id)) : [],
     createdAt: r.created_at ?? undefined,
     updatedAt: r.updated_at ?? undefined,
     deletedAt: r.deleted_at ?? null,
   }
 }
 
-type PartialUIReservation = Partial<UIReservation>
-
-/* --------------------------- Coercion utilities --------------------------- */
+/* --------------------------- Payload Construction --------------------------- */
 
 function strOrNull(v: unknown): string | null {
   const s = typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim()
   return s ? s : null
 }
+
 function numOrNull(v: unknown): number | null {
   if (v === "" || v === undefined || v === null) return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
 }
-function isIsoDate(v?: string) {
-  return !!v && /^\d{4}-\d{2}-\d{2}$/.test(v)
-}
-function isIsoDateTime(v?: string) {
-  // basic ISO 8601 datetime with optional seconds & offset (e.g. 2025-03-01T09:30[:ss][Z|±hh:mm])
-  return !!v && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?$/.test(v)
-}
-const isPositiveInt = (v: unknown) => {
-  const n = Number(v)
-  return Number.isInteger(n) && n > 0
+
+function isIsoDateOrTime(v?: string) {
+  // Rough check for ISO string
+  return !!v && (v.includes("T") || v.match(/^\d{4}-\d{2}-\d{2}$/))
 }
 
 /**
- * Build a backend-compliant payload.
- * Matches UpdateReservationRequest:
- * - trip_date: ISO-8601 datetime
- * - event: 'none'|'wedding'|'funeral'|'church'
- * - bus_ids: integer[] (nullable/array)
+ * Converts UI partial object to backend Payload.
+ * Handles the logic between Map Mode (waypoints with coords) vs Manual Mode (text only).
  */
 function toPayload(body: PartialUIReservation): Record<string, unknown> {
   const p: Record<string, unknown> = {}
 
-  // code (nullable ok)
-  if (body.code !== undefined) {
-    const v = strOrNull(body.code)
-    p.code = v !== null ? v : null
+  // Basic Fields
+  if (body.code !== undefined) p.code = strOrNull(body.code)
+  if (body.status) p.status = body.status
+  if (body.event) p.event = body.event
+  if (body.seats !== undefined) p.seats = Math.max(1, Number(body.seats))
+  if (body.priceTotal !== undefined) p.price_total = Number(body.priceTotal)
+  if (body.distanceKm !== undefined) p.distance_km = Number(body.distanceKm)
+
+  // Dates
+  if (body.tripDate && isIsoDateOrTime(body.tripDate)) {
+    p.trip_date = body.tripDate
   }
 
-  // trip_date (required if present): send full ISO datetime when valid
-  if (body.tripDate !== undefined) {
-    if (isIsoDateTime(body.tripDate) || isIsoDate(body.tripDate)) {
-      p.trip_date = body.tripDate
-    }
+  // Passenger
+  if (body.passenger) {
+    if (body.passenger.name) p.passenger_name = body.passenger.name
+    if (body.passenger.phone) p.passenger_phone = body.passenger.phone
+    if (body.passenger.email !== undefined) p.passenger_email = strOrNull(body.passenger.email)
   }
 
-  // route fields (required if present): only send when non-empty
-  if (body.route !== undefined) {
-    const f = strOrNull(body.route?.from)
-    const t = strOrNull(body.route?.to)
-    if (f !== null) p.from_location = f
-    if (t !== null) p.to_location = t
+  // Route & Waypoints Logic
+  // 1. Always sync from/to location text (essential for manual mode)
+  if (body.route) {
+    if (body.route.from) p.from_location = body.route.from
+    if (body.route.to) p.to_location = body.route.to
   }
 
-  // passenger fields (name/phone required if present)
-  if (body.passenger !== undefined) {
-    const name = strOrNull(body.passenger?.name)
-    const phone = strOrNull(body.passenger?.phone)
-    const email = strOrNull(body.passenger?.email)
+  // 2. Sync Waypoints (Geo Data)
+  // Only send 'waypoints' array if we actually have valid coordinates.
+  // If user used Manual Mode (text inputs), waypoints might be empty or have 0,0 coords.
+  if (body.waypoints) {
+    const validWaypoints = body.waypoints.filter(w => 
+      (w.lat !== 0 && w.lng !== 0) && (Math.abs(w.lat) > 0.0001 || Math.abs(w.lng) > 0.0001)
+    )
 
-    if (name !== null) p.passenger_name = name
-    if (phone !== null) p.passenger_phone = phone
-    if (body.passenger?.email !== undefined) {
-      p.passenger_email = email
-    }
-  }
-
-  // seats (required if present): only send valid numbers
-  if (body.seats !== undefined) {
-    const n = numOrNull(body.seats)
-    if (n !== null) p.seats = n
-  }
-
-  // price_total (nullable)
-  if (body.priceTotal !== undefined) {
-    const n = numOrNull(body.priceTotal)
-    p.price_total = n
-  }
-
-  // status (required if present)
-  if (body.status !== undefined) {
-    if (body.status) p.status = body.status
-  }
-
-  // event (required if present): only send valid values
-  if (body.event !== undefined) {
-    if (body.event) p.event = body.event
-  }
-
-  // waypoints: nullable|array|min:2 with required_with for items
-  if (body.waypoints !== undefined) {
-    if (Array.isArray(body.waypoints) && body.waypoints.length >= 2) {
-      p.waypoints = body.waypoints.map(w => ({
-        lat: Number(w.lat),
-        lng: Number(w.lng),
-        ...(w.label ? { label: String(w.label) } : {}),
+    if (validWaypoints.length >= 2) {
+      p.waypoints = validWaypoints.map(w => ({
+        lat: w.lat,
+        lng: w.lng,
+        label: w.label || null
       }))
     } else {
-      p.waypoints = null // clear them
+      // If we don't have enough geo-points, send null to clear existing map data on backend
+      p.waypoints = null
     }
   }
 
-  // distance_km (nullable)
-  if (body.distanceKm !== undefined) {
-    const n = numOrNull(body.distanceKm)
-    p.distance_km = n
-  }
-
-  // bus_ids (nullable array of INTEGERS). [] means detach all (sync to empty).
+  // Bus Syncing
   if (body.busIds !== undefined) {
-    const arr = (body.busIds ?? [])
-      .map(v => Number(v))
-      .filter(isPositiveInt)
-    p.bus_ids = arr
+    // Backend expects an array of IDs.
+    p.bus_ids = body.busIds.map(id => String(id))
   }
 
   return p
 }
 
-/* --------------------------------- Queries -------------------------------- */
+/* --------------------------------- Service --------------------------------- */
 
 export type ListParams = {
   search?: string
   status?: ReservationStatus | ""
-  date_from?: string // YYYY-MM-DD
-  date_to?: string   // YYYY-MM-DD
+  date_from?: string
+  date_to?: string
   bus_id?: number | string
   with?: ("buses")[]
   trashed?: "with" | "only" | "without"
-  order_by?: "created_at" | "updated_at" | "trip_date" | "price_total" | "seats" | "status"
+  order_by?: string
   order_dir?: "asc" | "desc"
   page?: number
   per_page?: number
@@ -273,15 +236,9 @@ export type ListParams = {
 function normalizeListParams(p?: ListParams) {
   if (!p) return undefined
   const out: Record<string, unknown> = { ...p }
-  if (p.with && p.with.length) out.with = p.with.join(",")
-  if (p.bus_id !== undefined) {
-    const n = Number(p.bus_id)
-    out.bus_id = Number.isFinite(n) ? n : p.bus_id
-  }
+  if (p.with?.length) out.with = p.with.join(",")
   return out
 }
-
-/* --------------------------------- Client --------------------------------- */
 
 async function list(params?: ListParams) {
   const qs = buildQuery(normalizeListParams(params))
@@ -290,12 +247,7 @@ async function list(params?: ListParams) {
     ...res,
     data: {
       rows: res.data.data.map(toUIReservation),
-      meta: res.data.meta ?? {
-        current_page: 1,
-        last_page: 1,
-        per_page: res.data.data.length,
-        total: res.data.data.length,
-      },
+      meta: res.data.meta ?? { current_page: 1, last_page: 1, per_page: 10, total: 0 },
     },
   }
 }
@@ -329,27 +281,29 @@ async function setStatus(id: string, status: ReservationStatus) {
   return { ...res, data: toUIReservation(res.data) }
 }
 
-async function syncBuses(id: string, busIds: Array<string | number>) {
-  const body = { bus_ids: (busIds ?? []).map(v => Number(v)).filter(isPositiveInt) }
-  const res = await api.post<ReservationDto, typeof body>(`/reservations/${id}/sync-buses`, body)
-  return { ...res, data: toUIReservation(res.data) }
-}
-
-async function attachBus(id: string, busId: string | number) {
-  const body = { bus_id: Number(busId) }
-  const res = await api.post<ReservationDto, typeof body>(`/reservations/${id}/attach-bus`, body)
-  return { ...res, data: toUIReservation(res.data) }
-}
-
-async function detachBus(id: string, busId: string | number) {
-  const body = { bus_id: Number(busId) }
-  const res = await api.post<ReservationDto, typeof body>(`/reservations/${id}/detach-bus`, body)
-  return { ...res, data: toUIReservation(res.data) }
-}
-
 async function bulkStatus(ids: string[], status: ReservationStatus) {
   const body = { ids, status }
   return api.post<{ updated: number }, typeof body>(`/reservations/bulk-status`, body)
+}
+
+// Quote Endpoint helper (used in UI)
+export async function getQuote(
+  vehicles: Record<string, number>, 
+  distanceKm: number, 
+  event: string
+) {
+  return api.post<any, any>("/quote", { 
+    vehicles_map: vehicles, 
+    distance_km: distanceKm, 
+    event 
+  })
+}
+
+
+// Manual Payment Record - Updated to include reference
+export async function recordPayment(id: string, payload: { amount: number, method: string, note?: string, reference?: string }) {
+  const res = await api.post<ReservationDto, typeof payload>(`/reservations/${id}/payment`, payload)
+  return { ...res, data: toUIReservation(res.data) }
 }
 
 export default {
@@ -360,10 +314,7 @@ export default {
   remove,
   restore,
   setStatus,
-  syncBuses,
-  attachBus,
-  detachBus,
   bulkStatus,
+  getQuote,
+  recordPayment,
 }
-
-// export type { UIReservation, UIWaypoint }

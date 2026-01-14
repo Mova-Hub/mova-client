@@ -689,7 +689,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
         </div>
       </div>
 
-      <div className="flex justify-end gap-3 pt-4 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky bottom-0 -mx-6 -mb-6 p-6 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+      <div className="flex justify-end gap-3 pt-4 py-6 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky bottom-0 -mx-6  px-4 z-20">
         <Button variant="outline" onClick={onCancel}>Retour</Button>
         <Button onClick={handleConvert} disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 min-w-[200px] shadow-lg">
           {loading ? "Conversion..." : "Confirmer & Convertir"}
