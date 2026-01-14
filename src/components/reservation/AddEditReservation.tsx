@@ -64,7 +64,7 @@ function buildVehiclesArray(hiace: number, coaster: number) {
   return arr
 }
 
-function buildVehiclesMap(hiace: number, coaster: number) {
+export function buildVehiclesMap(hiace: number, coaster: number) {
   const map: Record<string, number> = {}
   const h = Math.max(0, Math.floor(Number(hiace || 0)))
   const c = Math.max(0, Math.floor(Number(coaster || 0)))
