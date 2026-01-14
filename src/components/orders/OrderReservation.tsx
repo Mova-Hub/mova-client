@@ -9,7 +9,8 @@ import {
   IconAlertTriangle, 
   IconBrandGoogleMaps,
   IconX,
-  IconClick
+  IconClick,
+  IconGripVertical
 } from "@tabler/icons-react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -38,9 +39,12 @@ import api from "@/api/apiService"
 import { type UIBus } from "@/api/bus"
 
 // --- CONSTANTS ---
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "AIzaSyAdsMkW0YFs9nFqqj0fK8gRIx8XylblGY4"
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
 const BRAZZAVILLE_CENTER = { lat: -4.2634, lng: 15.2429 }
 const LIBRARIES: ("places" | "geometry")[] = ["places", "geometry"]
+
+// Custom Marker Icon (Emerald Teardrop)
+const MARKER_SVG_PATH = "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
 
 /* --- Types --- */
 type QuoteBreakdown = {
@@ -91,16 +95,11 @@ function GoogleMapPicker({
   React.useEffect(() => {
     if (!isLoaded || waypoints.length < 2) {
       setDirectionsResponse(null)
-      // We don't nullify routeKm here to allow manual override persistence if map is just cleared temporarily
-      // But standard behavior usually implies map resets distance. 
-      // Let's perform a reset only if it was map-derived. 
-      // Actually, standard is: < 2 points = 0km from map perspective.
       if (waypoints.length < 2) onRouteKmChange(0)
       return
     }
 
     const directionsService = new google.maps.DirectionsService()
-    
     const origin = waypoints[0]
     const destination = waypoints[waypoints.length - 1]
     
@@ -122,8 +121,6 @@ function GoogleMapPicker({
         setDirectionsResponse(result)
         const totalMeters = result.routes[0].legs.reduce((acc, leg) => acc + (leg.distance?.value || 0), 0)
         onRouteKmChange(Math.round((totalMeters / 1000) * 100) / 100)
-      } else {
-        console.error(`Directions request failed: ${status}`)
       }
     })
   }, [isLoaded, waypoints.length, waypoints])
@@ -145,43 +142,7 @@ function GoogleMapPicker({
     }
   }
 
-  // -- 3. Map Click Handler (Selection on Map) --
-  const onMapClick = React.useCallback((e: google.maps.MapMouseEvent) => {
-    if (!e.latLng) return
-    const lat = e.latLng.lat()
-    const lng = e.latLng.lng()
-
-    // Reverse Geocoding to get a label
-    const geocoder = new google.maps.Geocoder()
-    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-      let label = "Point carte"
-      if (status === "OK" && results && results[0]) {
-        // Try to find a decent address format
-        label = results[0].formatted_address
-      } else {
-        label = `${lat.toFixed(4)}, ${lng.toFixed(4)}`
-      }
-      
-      // Add the point
-      // We can't access 'onChange' directly inside callback without deps, 
-      // but 'waypoints' is in deps so it updates.
-      // Better to use a helper function outside useCallback or include deps.
-      // Using a direct prop call here:
-      
-      // Note: React state update inside callback needs care. 
-      // We'll trust the parent re-render cycle or use functional updates if waypoints was a state setter, 
-      // but here it's a prop. We rely on the prop being fresh.
-      
-      // Let's duplicate the add logic here for simplicity inside the callback context
-      // Actually, we can't easily access 'waypoints' inside useCallback without refreshing the listener constantly.
-      // We will use a ref or just let the effect handle it. 
-    })
-    
-    // Since we need the fresh 'waypoints' state, let's just do it directly without useCallback for this specific component structure
-    // or use the non-callback version.
-  }, []) 
-
-  // Simpler click handler not using useCallback to avoid stale closures on 'waypoints'
+  // -- 3. Map Click & Drag --
   const handleMapClick = (e: google.maps.MapMouseEvent) => {
     if (!e.latLng) return
     const lat = e.latLng.lat()
@@ -189,13 +150,24 @@ function GoogleMapPicker({
 
     const geocoder = new google.maps.Geocoder()
     geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-      let label = "Position sur la carte"
+      let label = "Point carte"
       if (status === "OK" && results?.[0]) {
-         // Prefer street address or route
          label = results[0].formatted_address.split(',')[0] 
       }
       addPoint(label, lat, lng)
     })
+  }
+
+  const handleMarkerDragEnd = (index: number, e: google.maps.MapMouseEvent) => {
+    if (!e.latLng) return
+    const next = [...waypoints]
+    next[index] = { 
+      ...next[index], 
+      lat: e.latLng.lat(), 
+      lng: e.latLng.lng(),
+      label: next[index].label + " (modifié)" 
+    }
+    onChange(next)
   }
 
   const addPoint = (label: string, lat: number, lng: number) => {
@@ -206,6 +178,30 @@ function GoogleMapPicker({
 
   return (
     <div className="space-y-3">
+      {/* GLOBAL STYLE FIX FOR PAC CONTAINER Z-INDEX */}
+      <style>{`
+        .pac-container {
+          z-index: 99999 !important;
+          border-radius: 0.5rem;
+          margin-top: 4px;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+          border: 1px solid #e2e8f0;
+          font-family: inherit;
+        }
+        .pac-item {
+          padding: 8px 12px;
+          cursor: pointer;
+          font-size: 0.875rem;
+        }
+        .pac-item:hover {
+          background-color: #f1f5f9;
+        }
+        .pac-item-query {
+          font-size: 0.875rem;
+          color: #0f172a;
+        }
+      `}</style>
+
       <div className="relative">
         <Autocomplete
           onLoad={(auto) => setAutocomplete(auto)}
@@ -227,60 +223,75 @@ function GoogleMapPicker({
           center={BRAZZAVILLE_CENTER}
           zoom={12}
           onLoad={(map) => setMap(map)}
-          onClick={handleMapClick} // ENABLE MAP SELECTION
+          onClick={handleMapClick}
           options={{
             streetViewControl: false,
             mapTypeControl: false,
-            clickableIcons: false, // Cleaner map click experience
+            clickableIcons: false,
           }}
         >
-          {/* Render Markers for each waypoint */}
+          {/* Render Markers */}
           {waypoints.map((wp, idx) => (
             wp.lat && wp.lng && (
               <Marker 
                 key={`${idx}-${wp.lat}`} 
                 position={{ lat: wp.lat, lng: wp.lng }}
+                draggable={true} // ENABLE DRAGGING
+                onDragEnd={(e) => handleMarkerDragEnd(idx, e)}
+                animation={google.maps.Animation.DROP}
+                icon={{
+                  path: MARKER_SVG_PATH,
+                  fillColor: "#059669", // Emerald 600
+                  fillOpacity: 1,
+                  strokeWeight: 1,
+                  strokeColor: "#ffffff",
+                  scale: 2,
+                  anchor: new google.maps.Point(12, 22), // Bottom tip of the pin
+                  labelOrigin: new google.maps.Point(12, 9), // Center of the bubble
+                }}
                 label={{
                   text: (idx + 1).toString(),
                   color: "white",
+                  fontSize: "12px",
                   fontWeight: "bold"
                 }}
-                // Customizing Marker slightly by using label
               />
             )
           ))}
 
-          {/* Render Route Line with Custom Style */}
+          {/* Render Route */}
           {directionsResponse && (
             <DirectionsRenderer 
               directions={directionsResponse} 
               options={{
-                suppressMarkers: true, // IMPORTANT: We use our own numbered markers above
+                suppressMarkers: true,
                 polylineOptions: {
-                  strokeColor: "#059669", // Emerald-600
+                  strokeColor: "#059669",
                   strokeOpacity: 0.8,
-                  strokeWeight: 6,
+                  strokeWeight: 5,
                 }
               }}
             />
           )}
         </GoogleMap>
         
-        {/* Overlay Hint */}
-        <div className="absolute bottom-2 left-2 bg-background/80 backdrop-blur px-2 py-1 rounded text-[10px] text-muted-foreground shadow-sm pointer-events-none flex items-center gap-1">
+        <div className="absolute bottom-2 left-2 bg-background/90 backdrop-blur px-2 py-1 rounded text-[10px] text-muted-foreground shadow-sm pointer-events-none flex items-center gap-1 border">
           <IconClick className="w-3 h-3" />
-          Cliquez sur la carte pour ajouter un point
+          Cliquez pour ajouter • Glissez les marqueurs pour ajuster
         </div>
       </div>
 
       {/* Selected Points List */}
       <div className="space-y-2">
         {waypoints.map((wp, idx) => (
-          <div key={idx} className="flex items-center gap-2 text-sm p-2 bg-muted/50 rounded-md">
-             <Badge variant="default" className="h-6 w-6 flex items-center justify-center rounded-full p-0">
+          <div key={idx} className="flex items-center gap-2 text-sm p-2 bg-muted/50 rounded-md border border-transparent hover:border-border transition-colors">
+             <div className="cursor-grab text-muted-foreground">
+                <IconGripVertical className="h-4 w-4" />
+             </div>
+             <Badge className="h-5 w-5 flex items-center justify-center rounded-full p-0 bg-emerald-600 hover:bg-emerald-700">
                {idx + 1}
              </Badge>
-             <span className="flex-1 truncate font-medium text-xs">{wp.label}</span>
+             <span className="flex-1 truncate font-medium text-xs text-foreground/80">{wp.label}</span>
              <Button 
                variant="ghost" 
                size="icon" 
@@ -311,11 +322,10 @@ type Props = {
 }
 
 export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
-  // --- Core State ---
   const [loading, setLoading] = React.useState(false)
   const [useMap, setUseMap] = React.useState(false)
 
-  // 1. Itinerary State
+  // 1. Itinerary
   const [tripDate, setTripDate] = React.useState<string>(() => {
     try {
       const dateStr = `${order.pickupDate}T${order.pickupTime}`
@@ -327,7 +337,6 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
   const [waypoints, setWaypoints] = React.useState<Waypoint[]>([])
   const [routeKm, setRouteKm] = React.useState<number | null>(null)
   
-  // Initialize waypoints from order if empty
   React.useEffect(() => {
     if (waypoints.length === 0 && !useMap) {
       const initial: Waypoint[] = []
@@ -337,22 +346,22 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
     }
   }, []) 
 
-  // 2. Passenger State
+  // 2. Passenger
   const [passengerName, setPassengerName] = React.useState(order.contactName || "")
   const [passengerPhone, setPassengerPhone] = React.useState(order.contactPhone || "")
   const [passengerEmail, setPassengerEmail] = React.useState(order.client?.email || "")
 
-  // 3. Pricing & Config State
+  // 3. Pricing
   const [eventType, setEventType] = React.useState<any>(order.eventType || "none")
   const [hiaceCount, setHiaceCount] = React.useState<number>(order.fleet['hiace'] || 0)
   const [coasterCount, setCoasterCount] = React.useState<number>(order.fleet['coaster'] || 0)
   const [manualPrice, setManualPrice] = React.useState<number>(0)
   
-  // 4. Bus Assignment State
+  // 4. Bus
   const [busIds, setBusIds] = React.useState<string[]>([])
   const [notes, setNotes] = React.useState(order.internalNotes || "")
 
-  // --- Quoting System ---
+  // Quoting
   const [quote, setQuote] = React.useState<QuoteFull | null>(null)
   const [quoting, setQuoting] = React.useState(false)
   const [quoteCurrency, setQuoteCurrency] = React.useState("FCFA")
@@ -360,7 +369,6 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
 
   const distanceKmDisplay = routeKm ?? 0
 
-  // --- Helpers for Bus Logic ---
   const busTypeIndex = React.useMemo(() => {
     const idx: Record<string, "hiace" | "coaster" | "unknown"> = {}
     ;(buses ?? []).forEach(b => {
@@ -380,13 +388,12 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
     return { h, c }
   }
 
-  // --- Quote Effect ---
   React.useEffect(() => {
     let cancelled = false
     const seq = ++quoteReqSeq.current
 
-    // Require distance > 0 and at least one bus type count
-    const distanceOk = Number.isFinite(distanceKmDisplay) && (distanceKmDisplay ?? 0) > 0
+    // Trigger quote if distance > 0 OR user manually set a distance (handled by distanceKmDisplay)
+    const distanceOk = Number.isFinite(distanceKmDisplay) && distanceKmDisplay > 0
     const haveCounts = (hiaceCount > 0 || coasterCount > 0)
     
     if (!(haveCounts && distanceOk)) {
@@ -445,7 +452,6 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
     setWaypoints(next)
   }
 
-  // --- Final Submit ---
   const handleConvert = async () => {
     if (busIds.length === 0) return toast.error("Veuillez assigner au moins un bus.")
     if (!passengerName || !passengerPhone) return toast.error("Nom et téléphone passager requis.")
@@ -482,10 +488,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
 
   return (
     <div className="flex flex-col h-full bg-background animate-in fade-in slide-in-from-top-4 relative">
-      
-      {/* Scrollable Body */}
       <div className="flex-1 space-y-8 pr-2 pb-32">
-        
         <div className="flex items-center justify-between pb-2 border-b">
           <div>
             <h3 className="font-bold text-lg text-emerald-800 flex items-center gap-2">
@@ -496,11 +499,10 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
           <Button variant="ghost" size="sm" onClick={onCancel}>Annuler</Button>
         </div>
 
-        {/* 1. Itinerary Section */}
+        {/* 1. Itinerary */}
         <div className="space-y-4">
             <div className="flex items-center justify-between">
                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Itinéraire</h3>
-               {/* Map Choice */}
                <div className="flex items-center gap-2">
                   <Switch id="map-mode" checked={useMap} onCheckedChange={setUseMap} />
                   <Label htmlFor="map-mode" className="text-xs cursor-pointer flex items-center gap-1">
@@ -517,7 +519,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
               </div>
               <div className="grid gap-1.5">
                 <Label>Distance (km)</Label>
-                {/* Distance Input Enabled for Edit */}
+                {/* Enabled Distance Input */}
                 <Input 
                   type="number"
                   value={Number.isFinite(distanceKmDisplay) ? distanceKmDisplay : 0} 
@@ -584,7 +586,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
 
         <Separator />
 
-        {/* 3. Pricing & Resources */}
+        {/* 3. Pricing */}
         <div className="space-y-3">
            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Tarification & Ressources</h3>
            <div className="grid gap-4 sm:grid-cols-2">
@@ -606,7 +608,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
              <div className="grid gap-1.5">
                <Label>Prix Total Client</Label>
                <div className="relative">
-                 {/* Price Input Disabled */}
+                 {/* Disabled Price Input */}
                  <Input 
                    type="number" 
                    value={manualPrice} 
@@ -646,7 +648,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
 
         <Separator />
 
-        {/* 5. Quote Breakdown */}
+        {/* 5. Recap */}
         <div className="space-y-4">
            <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Récapitulatif</h3>
@@ -683,7 +685,6 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
         </div>
       </div>
 
-      {/* Sticky Footer Action */}
       <div className="flex justify-end gap-3 pt-4 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky bottom-0 -mx-6 -mb-6 p-6 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
         <Button variant="outline" onClick={onCancel}>Retour</Button>
         <Button onClick={handleConvert} disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 min-w-[200px] shadow-lg">

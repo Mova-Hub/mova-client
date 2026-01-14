@@ -2,7 +2,7 @@
 import * as React from "react"
 import { format } from "date-fns"
 import { fr } from "date-fns/locale"
-import { IconArrowRight, IconBus, IconCalendar, IconCheck, IconPlus } from "@tabler/icons-react"
+import { IconArrowRight, IconBrandWhatsapp, IconBus, IconCalendar, IconCheck, IconMessageCircle, IconPhone, IconPlus, IconUser } from "@tabler/icons-react"
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { OrderReservation } from "./OrderReservation"
 import { type Order } from "@/api/order"
 import { type UIBus } from "@/api/bus"
+import { Label } from "@/components/ui/label"
 
 interface Props {
   order: Order | null
@@ -51,25 +52,52 @@ export function OrderDetailDialog({ order, open, onOpenChange, onUpdate, buses }
         <div className="flex-1 overflow-y-auto p-6 scrollbar-thin scrollbar-thumb-muted">
           {!isConverting ? (
             <div className="space-y-8 animate-in fade-in duration-300">
-                <section className="grid md:grid-cols-2 gap-6 bg-muted/20 p-4 rounded-lg border">
-                <div className="space-y-2">
-                    <h4 className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
-                    <IconCalendar className="w-3 h-3" /> Souhait du client
-                    </h4>
-                    <p className="text-sm"><b>Trajet:</b> {order.origin} <IconArrowRight className="inline w-3 h-3" /> {order.destination}</p>
-                    <p className="text-sm"><b>Date:</b> {format(new Date(order.pickupDate), "PPPP", { locale: fr })} à {order.pickupTime}</p>
+                
+            <section className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-xl border">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
+                  <IconCalendar className="w-3 h-3" /> Itinéraire
+                </Label>
+                <div className="font-medium flex items-center gap-2">
+                  {order.origin} <IconArrowRight className="w-3 h-3 text-muted-foreground" /> {order.destination}
                 </div>
-                <div className="space-y-2">
-                    <h4 className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
-                    <IconBus className="w-3 h-3" /> Flotte demandée
-                    </h4>
+                <p className="text-sm">
+                  {format(new Date(order.pickupDate), "dd MMMM yyyy", { locale: fr })} à {order.pickupTime}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
+                  <IconBus className="w-3 h-3" /> Type d'événement
+                </Label>
+                <p className="font-medium capitalize">{order.eventType.replace('_', ' ')}</p>
                     <div className="flex flex-wrap gap-2">
                     {Object.entries(order.fleet).map(([type, qty]) => (
-                        <Badge key={type} variant="secondary">{qty}x {type}</Badge>
+                        <Badge key={type} variant="outline">{qty}x {type}</Badge>
                     ))}
                     </div>
+              </div>
+            </section>
+
+            {/* 2. Contact Section */}
+            <section className="space-y-3">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <IconUser className="w-4 h-4 text-primary" /> Information Client
+              </h4>
+              <div className="flex items-center justify-between p-3 border rounded-lg">
+                <div>
+                  <p className="font-medium">{order.contactName}</p>
+                  <p className="text-sm text-muted-foreground">{order.contactPhone}</p>
                 </div>
-                </section>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" asChild className="h-8 w-8 p-0 rounded-full">
+                    <a href={`tel:${order.contactPhone}`}><IconPhone className="w-4 h-4" /></a>
+                  </Button>
+                  <Button size="sm" variant="outline" asChild className="h-8 w-8 p-0 rounded-full text-green-600">
+                    <a href={`https://wa.me/${order.contactPhone.replace('+', '')}`} target="_blank"><IconBrandWhatsapp className="w-4 h-4" /></a>
+                  </Button>
+                </div>
+              </div>
+            </section>
 
               <Separator />
 
