@@ -39,7 +39,7 @@ import api from "@/api/apiService"
 import { type UIBus } from "@/api/bus"
 
 // --- CONSTANTS ---
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""
 const BRAZZAVILLE_CENTER = { lat: -4.2634, lng: 15.2429 }
 const LIBRARIES: ("places" | "geometry")[] = ["places", "geometry"]
 
@@ -91,39 +91,49 @@ function GoogleMapPicker({
   const [autocomplete, setAutocomplete] = React.useState<google.maps.places.Autocomplete | null>(null)
   const searchRef = React.useRef<HTMLInputElement>(null)
 
-  // -- 1. Route Calculation Logic --
+  // -- 1. OPTIMIZED Route Calculation Logic (Debounced) --
   React.useEffect(() => {
-    if (!isLoaded || waypoints.length < 2) {
+    if (!isLoaded) return
+
+    // If less than 2 points, clear route immediately without API call
+    if (waypoints.length < 2) {
       setDirectionsResponse(null)
-      if (waypoints.length < 2) onRouteKmChange(0)
+      onRouteKmChange(0)
       return
     }
 
-    const directionsService = new google.maps.DirectionsService()
-    const origin = waypoints[0]
-    const destination = waypoints[waypoints.length - 1]
-    
-    // Middle points are stopovers
-    const stops = waypoints.slice(1, -1).map(wp => ({
-      location: (wp.lat && wp.lng) ? { lat: wp.lat, lng: wp.lng } : undefined,
-      stopover: true
-    })).filter(s => s.location !== undefined) as google.maps.DirectionsWaypoint[]
+    // OPTIMIZATION: Debounce the API call by 1000ms.
+    // If user drags marker rapidly, we only call API when they stop.
+    const timeoutId = setTimeout(() => {
+      const directionsService = new google.maps.DirectionsService()
+      const origin = waypoints[0]
+      const destination = waypoints[waypoints.length - 1]
+      
+      const stops = waypoints.slice(1, -1).map(wp => ({
+        location: (wp.lat && wp.lng) ? { lat: wp.lat, lng: wp.lng } : undefined,
+        stopover: true
+      })).filter(s => s.location !== undefined) as google.maps.DirectionsWaypoint[]
 
-    if (!origin.lat || !destination.lat) return
+      if (!origin.lat || !destination.lat) return
 
-    directionsService.route({
-      origin: { lat: origin.lat!, lng: origin.lng! },
-      destination: { lat: destination.lat!, lng: destination.lng! },
-      waypoints: stops,
-      travelMode: google.maps.TravelMode.DRIVING,
-    }, (result, status) => {
-      if (status === google.maps.DirectionsStatus.OK && result) {
-        setDirectionsResponse(result)
-        const totalMeters = result.routes[0].legs.reduce((acc, leg) => acc + (leg.distance?.value || 0), 0)
-        onRouteKmChange(Math.round((totalMeters / 1000) * 100) / 100)
-      }
-    })
-  }, [isLoaded, waypoints.length, waypoints])
+      directionsService.route({
+        origin: { lat: origin.lat!, lng: origin.lng! },
+        destination: { lat: destination.lat!, lng: destination.lng! },
+        waypoints: stops,
+        travelMode: google.maps.TravelMode.DRIVING,
+      }, (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK && result) {
+          setDirectionsResponse(result)
+          const totalMeters = result.routes[0].legs.reduce((acc, leg) => acc + (leg.distance?.value || 0), 0)
+          onRouteKmChange(Math.round((totalMeters / 1000) * 100) / 100)
+        } else {
+          console.error(`Directions request failed: ${status}`)
+        }
+      })
+    }, 1000) // 1 second delay
+
+    return () => clearTimeout(timeoutId)
+  }, [isLoaded, waypoints]) // Intentionally relying on waypoints structure
 
   // -- 2. Autocomplete Handler --
   const onPlaceChanged = () => {
@@ -165,7 +175,7 @@ function GoogleMapPicker({
       ...next[index], 
       lat: e.latLng.lat(), 
       lng: e.latLng.lng(),
-      label: next[index].label + " (modifié)" 
+      label: next[index].label // Keep original label or mark as moved
     }
     onChange(next)
   }
@@ -178,7 +188,6 @@ function GoogleMapPicker({
 
   return (
     <div className="space-y-3">
-      {/* GLOBAL STYLE FIX FOR PAC CONTAINER Z-INDEX */}
       <style>{`
         .pac-container {
           z-index: 99999 !important;
@@ -207,6 +216,7 @@ function GoogleMapPicker({
           onLoad={(auto) => setAutocomplete(auto)}
           onPlaceChanged={onPlaceChanged}
           restrictions={{ country: "cg" }}
+          fields={["geometry", "name", "formatted_address"]} // OPTIMIZATION: Only fetch Basic Data
         >
           <Input 
             ref={searchRef}
@@ -230,24 +240,23 @@ function GoogleMapPicker({
             clickableIcons: false,
           }}
         >
-          {/* Render Markers */}
           {waypoints.map((wp, idx) => (
             wp.lat && wp.lng && (
               <Marker 
                 key={`${idx}-${wp.lat}`} 
                 position={{ lat: wp.lat, lng: wp.lng }}
-                draggable={true} // ENABLE DRAGGING
+                draggable={true}
                 onDragEnd={(e) => handleMarkerDragEnd(idx, e)}
                 animation={google.maps.Animation.DROP}
                 icon={{
                   path: MARKER_SVG_PATH,
-                  fillColor: "#059669", // Emerald 600
+                  fillColor: "#059669",
                   fillOpacity: 1,
                   strokeWeight: 1,
                   strokeColor: "#ffffff",
                   scale: 2,
-                  anchor: new google.maps.Point(12, 22), // Bottom tip of the pin
-                  labelOrigin: new google.maps.Point(12, 9), // Center of the bubble
+                  anchor: new google.maps.Point(12, 22),
+                  labelOrigin: new google.maps.Point(12, 9),
                 }}
                 label={{
                   text: (idx + 1).toString(),
@@ -259,7 +268,6 @@ function GoogleMapPicker({
             )
           ))}
 
-          {/* Render Route */}
           {directionsResponse && (
             <DirectionsRenderer 
               directions={directionsResponse} 
@@ -281,7 +289,6 @@ function GoogleMapPicker({
         </div>
       </div>
 
-      {/* Selected Points List */}
       <div className="space-y-2">
         {waypoints.map((wp, idx) => (
           <div key={idx} className="flex items-center gap-2 text-sm p-2 bg-muted/50 rounded-md border border-transparent hover:border-border transition-colors">
@@ -311,7 +318,6 @@ function GoogleMapPicker({
   )
 }
 
-
 /* --- MAIN COMPONENT --- */
 
 type Props = {
@@ -325,7 +331,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
   const [loading, setLoading] = React.useState(false)
   const [useMap, setUseMap] = React.useState(false)
 
-  // 1. Itinerary
+  // 1. Itinerary State
   const [tripDate, setTripDate] = React.useState<string>(() => {
     try {
       const dateStr = `${order.pickupDate}T${order.pickupTime}`
@@ -346,22 +352,22 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
     }
   }, []) 
 
-  // 2. Passenger
+  // 2. Passenger State
   const [passengerName, setPassengerName] = React.useState(order.contactName || "")
   const [passengerPhone, setPassengerPhone] = React.useState(order.contactPhone || "")
   const [passengerEmail, setPassengerEmail] = React.useState(order.client?.email || "")
 
-  // 3. Pricing
+  // 3. Pricing & Config State
   const [eventType, setEventType] = React.useState<any>(order.eventType || "none")
   const [hiaceCount, setHiaceCount] = React.useState<number>(order.fleet['hiace'] || 0)
   const [coasterCount, setCoasterCount] = React.useState<number>(order.fleet['coaster'] || 0)
   const [manualPrice, setManualPrice] = React.useState<number>(0)
   
-  // 4. Bus
+  // 4. Bus Assignment State
   const [busIds, setBusIds] = React.useState<string[]>([])
   const [notes, setNotes] = React.useState(order.internalNotes || "")
 
-  // Quoting
+  // --- Quoting System ---
   const [quote, setQuote] = React.useState<QuoteFull | null>(null)
   const [quoting, setQuoting] = React.useState(false)
   const [quoteCurrency, setQuoteCurrency] = React.useState("FCFA")
@@ -388,12 +394,12 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
     return { h, c }
   }
 
+  // --- Quote Effect (Debounced) ---
   React.useEffect(() => {
     let cancelled = false
     const seq = ++quoteReqSeq.current
 
-    // Trigger quote if distance > 0 OR user manually set a distance (handled by distanceKmDisplay)
-    const distanceOk = Number.isFinite(distanceKmDisplay) && distanceKmDisplay > 0
+    const distanceOk = Number.isFinite(distanceKmDisplay) && (distanceKmDisplay ?? 0) > 0
     const haveCounts = (hiaceCount > 0 || coasterCount > 0)
     
     if (!(haveCounts && distanceOk)) {
@@ -499,7 +505,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
           <Button variant="ghost" size="sm" onClick={onCancel}>Annuler</Button>
         </div>
 
-        {/* 1. Itinerary */}
+        {/* Itinerary */}
         <div className="space-y-4">
             <div className="flex items-center justify-between">
                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Itinéraire</h3>
@@ -519,7 +525,6 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
               </div>
               <div className="grid gap-1.5">
                 <Label>Distance (km)</Label>
-                {/* Enabled Distance Input */}
                 <Input 
                   type="number"
                   value={Number.isFinite(distanceKmDisplay) ? distanceKmDisplay : 0} 
@@ -565,7 +570,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
 
         <Separator />
 
-        {/* 2. Passenger */}
+        {/* Passenger */}
         <div className="space-y-3">
            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Passager</h3>
            <div className="grid gap-4 sm:grid-cols-2">
@@ -586,7 +591,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
 
         <Separator />
 
-        {/* 3. Pricing */}
+        {/* Pricing */}
         <div className="space-y-3">
            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Tarification & Ressources</h3>
            <div className="grid gap-4 sm:grid-cols-2">
@@ -608,7 +613,6 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
              <div className="grid gap-1.5">
                <Label>Prix Total Client</Label>
                <div className="relative">
-                 {/* Disabled Price Input */}
                  <Input 
                    type="number" 
                    value={manualPrice} 
@@ -625,7 +629,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
 
         <Separator />
 
-        {/* 4. Bus Assignment */}
+        {/* Bus Assignment */}
         <div className="space-y-3">
            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Affectation des Bus</h3>
            <div className="grid gap-1.5">
@@ -648,7 +652,7 @@ export function OrderReservation({ order, buses, onSuccess, onCancel }: Props) {
 
         <Separator />
 
-        {/* 5. Recap */}
+        {/* Quote Breakdown */}
         <div className="space-y-4">
            <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Récapitulatif</h3>
