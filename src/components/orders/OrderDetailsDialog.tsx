@@ -5,11 +5,11 @@ import { fr } from "date-fns/locale"
 import { 
   IconPhone, IconMessageCircle, IconArrowRight, 
   IconBus, IconCalendar, IconUser, IconCash, IconPlus, 
-  IconCheck
+  IconCheck, IconMapPin
 } from "@tabler/icons-react"
 import { toast } from "sonner"
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
@@ -18,11 +18,17 @@ import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-import orderApi, { type Order } from "@/api/order"
+import orderApi, { type Order, type ConvertPayload } from "@/api/order"
 import { type UIBus } from "@/api/bus"
-import { MultiSelectBuses } from "../reservation/AddEditReservation-copy"
-// Reuse the MultiSelectBuses logic/component from your Reservation file
-// import { MultiSelectBuses } from "@/components/reservation/AddEditReservation" 
+// import { 
+//     MultiSelectBuses, 
+//     MapPicker, 
+//     TripDateTimePicker, 
+//     EventCombobox,
+//     fmtMoney
+// } from "../reservation/AddEditReservation" // Reuse components from your Reservation file
+import api from "@/api/apiService"
+import { EventCombobox, MapPicker, MultiSelectBuses, TripDateTimePicker } from "../reservation/AddEditReservation"
 
 interface Props {
   order: Order | null
@@ -36,35 +42,71 @@ export function OrderDetailDialog({ order, open, onOpenChange, onUpdate, buses }
   const [isConverting, setIsConverting] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   
-  // Conversion Form State
+  // --- Conversion State (Reservation Builder) ---
+  const [waypoints, setWaypoints] = React.useState<any[]>([])
+  const [tripDate, setTripDate] = React.useState<string>("")
+  const [busIds, setBusIds] = React.useState<string[]>([])
   const [price, setPrice] = React.useState<number>(0)
-  const [selectedBusIds, setSelectedBusIds] = React.useState<string[]>([])
+  const [distanceKm, setDistanceKm] = React.useState<number | null>(null)
+  const [eventType, setEventType] = React.useState<any>("none")
   const [notes, setNotes] = React.useState("")
 
+  // Initializing conversion data from lead
   React.useEffect(() => {
     if (open && order) {
+      setIsConverting(false)
       setNotes(order.internalNotes ?? "")
-      setIsConverting(false) // Reset view on open
-      setSelectedBusIds([])
+      try {
+        // 1. Basic combination
+        const dateStr = `${order.pickupDate}T${order.pickupTime}`
+        
+        // 2. Validate it. If invalid, date-fns inside the picker will crash the app.
+        const testDate = new Date(dateStr)
+        
+        if (!isNaN(testDate.getTime())) {
+           setTripDate(dateStr)
+        } else {
+           console.warn("Invalid order date format, defaulting to now:", dateStr)
+           setTripDate(new Date().toISOString())
+        }
+      } catch (e) {
+        // Fallback for any parsing errors
+        setTripDate(new Date().toISOString())
+      }
+      
+      setEventType(order.eventType)
+      // Clear specific reservation states
+      setBusIds([])
       setPrice(0)
+      setWaypoints([]) 
     }
   }, [open, order])
 
   if (!order) return null
 
-  const handleConvert = async () => {
-    if (price <= 0 || selectedBusIds.length === 0) {
-      return toast.error("Veuillez saisir un prix et sélectionner au moins un bus.")
-    }
+  const handleConvertAction = async () => {
+    if (busIds.length === 0) return toast.error("Assignez au moins un bus.")
+    if (waypoints.length < 2) return toast.error("Définissez l'itinéraire sur la carte.")
 
     setLoading(true)
     try {
-      await orderApi.convertToReservation(order.id, {
+      const payload: ConvertPayload = {
+        trip_date: tripDate,
+        from_location: waypoints[0].label,
+        to_location: waypoints[waypoints.length - 1].label,
+        passenger_name: order.contactName,
+        passenger_phone: order.contactPhone,
+        passenger_email: order.client?.email,
         price_total: price,
-        bus_ids: selectedBusIds,
+        bus_ids: busIds,
+        waypoints: waypoints,
+        distance_km: distanceKm ?? 0,
+        event: eventType,
         internal_notes: notes
-      })
-      toast.success("Demande convertie en réservation avec succès !")
+      }
+      
+      const res = await orderApi.convertToReservation(order.id, payload)
+      toast.success(res.message)
       onUpdate()
       onOpenChange(false)
     } catch (e: any) {
@@ -74,168 +116,144 @@ export function OrderDetailDialog({ order, open, onOpenChange, onUpdate, buses }
     }
   }
 
-  const busOptions = buses.map(b => ({
-    label: b.plate || b.name || String(b.id),
-    value: String(b.id),
-    type: b.type as any
-  }))
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden flex flex-col max-h-[90vh]">
+      <DialogContent className="sm:max-w-4xl p-0 flex flex-col h-[90vh] overflow-hidden">
         <DialogHeader className="p-6 pb-0">
           <div className="flex justify-between items-start">
             <div>
               <DialogTitle className="text-xl">Demande #{order.id}</DialogTitle>
-              <p className="text-sm text-muted-foreground">
-                Reçue le {format(new Date(order.createdAt), "PPP à p", { locale: fr })}
-              </p>
+              <DialogDescription>
+                Client: {order.contactName} • Reçue le {format(new Date(order.createdAt), "dd MMM yyyy", { locale: fr })}
+              </DialogDescription>
             </div>
             <Badge variant={order.status === 'converted' ? 'secondary' : 'default'}>
-              {order.status === 'converted' ? 'Converti' : 'Nouveau Lead'}
+              {order.status === 'converted' ? 'Converti' : 'Lead Actif'}
             </Badge>
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 p-6">
-          <div className="space-y-6">
-            {/* 1. Trip Section */}
-            <section className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-xl border">
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
-                  <IconCalendar className="w-3 h-3" /> Itinéraire
-                </Label>
-                <div className="font-medium flex items-center gap-2">
-                  {order.origin} <IconArrowRight className="w-3 h-3 text-muted-foreground" /> {order.destination}
-                </div>
-                <p className="text-sm">
-                  {format(new Date(order.pickupDate), "dd MMMM yyyy", { locale: fr })} à {order.pickupTime}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground uppercase flex items-center gap-1">
-                  <IconBus className="w-3 h-3" /> Type d'événement
-                </Label>
-                <p className="font-medium capitalize">{order.eventType.replace('_', ' ')}</p>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {Object.entries(order.fleet).map(([type, qty]) => (
-                    <Badge key={type} variant="outline" className="text-[10px] bg-background">
-                      {qty}x {type}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </section>
-
-            {/* 2. Contact Section */}
-            <section className="space-y-3">
-              <h4 className="text-sm font-semibold flex items-center gap-2">
-                <IconUser className="w-4 h-4 text-primary" /> Information Client
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          
+          {/* Section 1: Lead Details (Always visible) */}
+          <section className="grid md:grid-cols-2 gap-6 bg-muted/20 p-4 rounded-lg border">
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
+                <IconCalendar className="w-3 h-3" /> Souhait du client
               </h4>
-              <div className="flex items-center justify-between p-3 border rounded-lg">
-                <div>
-                  <p className="font-medium">{order.contactName}</p>
-                  <p className="text-sm text-muted-foreground">{order.contactPhone}</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" asChild className="h-8 w-8 p-0 rounded-full">
-                    <a href={`tel:${order.contactPhone}`}><IconPhone className="w-4 h-4" /></a>
-                  </Button>
-                  <Button size="sm" variant="outline" asChild className="h-8 w-8 p-0 rounded-full text-green-600">
-                    <a href={`https://wa.me/${order.contactPhone.replace('+', '')}`} target="_blank"><IconMessageCircle className="w-4 h-4" /></a>
-                  </Button>
-                </div>
+              <p className="text-sm"><b>Trajet:</b> {order.origin} <IconArrowRight className="inline w-3 h-3" /> {order.destination}</p>
+              <p className="text-sm"><b>Date:</b> {format(new Date(order.pickupDate), "PPPP", { locale: fr })} à {order.pickupTime}</p>
+            </div>
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2">
+                <IconBus className="w-3 h-3" /> Flotte demandée
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(order.fleet).map(([type, qty]) => (
+                  <Badge key={type} variant="secondary">{qty}x {type}</Badge>
+                ))}
               </div>
-            </section>
+            </div>
+          </section>
 
-            <Separator />
+          <Separator />
 
-            {/* 3. Conversion Form (Action Area) */}
-            {order.status !== 'converted' && (
-              <section className={cn("space-y-4 rounded-lg p-4 transition-all", isConverting ? "bg-emerald-50/50 border border-emerald-200" : "bg-muted/20")}>
-                {!isConverting ? (
-                  <div className="flex flex-col items-center py-2">
-                    <p className="text-sm text-muted-foreground mb-3 text-center">
-                      Le client a-t-il validé le devis ?
-                    </p>
-                    <Button 
-                      onClick={() => setIsConverting(true)}
-                      className="bg-emerald-600 hover:bg-emerald-700 w-full"
-                    >
-                      <IconPlus className="mr-2 w-4 h-4" /> Préparer la réservation
-                    </Button>
+          {/* Section 2: The Conversion Builder */}
+          {order.status !== 'converted' && (
+            <div className="space-y-6">
+              {!isConverting ? (
+                <div className="flex flex-col items-center justify-center py-10 space-y-4 border-2 border-dashed rounded-xl">
+                  <p className="text-muted-foreground">Prêt à transformer ce lead en voyage ?</p>
+                  <Button onClick={() => setIsConverting(true)} size="lg" className="bg-emerald-600 hover:bg-emerald-700">
+                    <IconPlus className="mr-2 h-5 w-5" /> Préparer la réservation
+                  </Button>
+                </div>
+              ) : (
+                <div className="animate-in fade-in slide-in-from-top-4 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-lg flex items-center gap-2 text-emerald-700">
+                      <IconMapPin className="w-5 h-5" /> Itinéraire Réel & Carte
+                    </h3>
+                    <Button variant="ghost" size="sm" onClick={() => setIsConverting(false)}>Annuler</Button>
                   </div>
-                ) : (
-                  <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-bold text-emerald-800">Détails de la réservation</h4>
-                      <Button variant="ghost" size="sm" onClick={() => setIsConverting(false)} className="h-7 text-xs">Annuler</Button>
+
+                  <div className="grid gap-6">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Date & Heure Confirmée</Label>
+                        <TripDateTimePicker valueIso={tripDate} onChange={setTripDate} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Événement</Label>
+                        <EventCombobox value={eventType} onChange={setEventType} />
+                      </div>
                     </div>
 
-                    <div className="grid gap-4">
-                      <div className="space-y-1.5">
-                        <Label>Prix total convenu (FCFA)</Label>
-                        <div className="relative">
-                          <IconCash className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                          <Input 
-                            type="number" 
-                            className="pl-9" 
-                            placeholder="0" 
-                            value={price || ""} 
-                            onChange={e => setPrice(Number(e.target.value))}
+                    <MapPicker 
+                      waypoints={waypoints} 
+                      onChange={setWaypoints} 
+                      onRouteKmChange={setDistanceKm} 
+                    />
+
+                    <div className="space-y-4">
+                      <h4 className="font-semibold text-sm">Assignation des ressources</h4>
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Buses</Label>
+                          <MultiSelectBuses 
+                            value={busIds} 
+                            onChange={setBusIds} 
+                            options={buses.map(b => ({ label: b.plate!, value: String(b.id), type: b.type as any }))} 
                           />
                         </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label>Assigner les bus (Basé sur la flotte demandée)</Label>
-                        <MultiSelectBuses
-                          value={selectedBusIds}
-                          onChange={setSelectedBusIds}
-                          options={busOptions}
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label>Notes internes</Label>
-                        <Textarea 
-                          placeholder="Instructions pour le chauffeur, détails de paiement..." 
-                          value={notes}
-                          onChange={e => setNotes(e.target.value)}
-                        />
+                        <div className="space-y-2">
+                          <Label>Prix Final (FCFA)</Label>
+                          <div className="relative">
+                            <Input 
+                              type="number" 
+                              value={price} 
+                              onChange={(e) => setPrice(Number(e.target.value))} 
+                              className="pl-10" 
+                            />
+                            <IconCash className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </div>
                       </div>
                     </div>
+
+                    <div className="space-y-2">
+                      <Label>Notes pour le chauffeur</Label>
+                      <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+                    </div>
                   </div>
-                )}
-              </section>
-            )}
+                </div>
+              )}
+            </div>
+          )}
 
-            {order.status === 'converted' && (
-              <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-lg flex items-center gap-3 text-emerald-800">
-                <IconCheck className="w-5 h-5" />
-                <p className="text-sm font-medium">Cette demande a déjà été convertie en réservation.</p>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+          {order.status === 'converted' && (
+            <div className="flex flex-col items-center justify-center py-12 text-emerald-600 bg-emerald-50 rounded-xl border border-emerald-100">
+              <IconCheck className="h-12 w-12 mb-2" />
+              <p className="font-bold">Demande traitée et convertie.</p>
+            </div>
+          )}
+        </div>
 
-        <DialogFooter className="p-6 bg-muted/10 border-t">
+        {/* Fixed Footer */}
+        <DialogFooter className="p-6 border-t bg-muted/10">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Fermer</Button>
           {isConverting && (
             <Button 
-              className="bg-emerald-600 hover:bg-emerald-700" 
-              onClick={handleConvert}
-              disabled={loading}
+                onClick={handleConvertAction} 
+                disabled={loading}
+                className="bg-emerald-600 hover:bg-emerald-700"
             >
-              {loading ? "Traitement..." : "Confirmer la Réservation"}
+              {loading ? "Conversion..." : "Confirmer la Réservation"}
             </Button>
           )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
-}
-
-function cn(...classes: any[]) {
-  return classes.filter(Boolean).join(' ')
 }

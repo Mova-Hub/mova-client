@@ -171,7 +171,7 @@ function EnvAlert({ message }: { message: string }) {
 }
 
 /* --------------------------- MultiSelect (buses) --------------------------- */
-function MultiSelectBuses({
+export function MultiSelectBuses({
   value,
   onChange,
   options,
@@ -354,7 +354,7 @@ function MultiSelectBuses({
 
 /* --------------------------------- MapPicker -------------------------------- */
 
-function MapPicker({
+export function MapPicker({
   waypoints,
   onChange,
   onRouteKmChange,
@@ -682,7 +682,7 @@ function groupBy<T, K extends string | number | symbol>(arr: T[], key: (t: T) =>
   }, {} as Record<K, T[]>)
 }
 
-function EventCombobox({
+export function EventCombobox({
   value,
   onChange,
 }: {
@@ -762,7 +762,7 @@ function toIsoLocal(d: Date) {
 
 /* ---------------------------- Datetime Picker ------------------------------ */
 
-function TripDateTimePicker({
+export function TripDateTimePicker({
   valueIso,
   onChange,
 }: {

@@ -52,8 +52,17 @@ export type Order = {
 }
 
 export type ConvertPayload = {
+  trip_date: string
+  from_location: string
+  to_location: string
+  passenger_name: string
+  passenger_phone: string
+  passenger_email?: string
   price_total: number
-  bus_ids: string[]
+  bus_ids: (string | number)[]
+  waypoints?: any[]
+  distance_km?: number
+  event?: string
   internal_notes?: string
 }
 
@@ -104,7 +113,6 @@ async function update(id: string | number, payload: { status?: OrderStatus, inte
 }
 
 async function convertToReservation(id: string | number, payload: ConvertPayload) {
-  // Matches OrderController@convertToReservation validation
   const res = await api.post<{ status: boolean, message: string }>(`/orders/${id}/convert`, payload)
   return res.data
 }
