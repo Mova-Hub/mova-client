@@ -56,7 +56,7 @@ import {
 } from '@react-google-maps/api'
 
 import type { Reservation, Trip, Bus } from "@/types"
-import type { UIReservation } from "@/api/reservation"
+import { type UIReservation, type ReservationEvent } from "@/api/reservation"
 import type { BusType } from "@/api/bus"
 import api from "@/api/apiService"
 
@@ -86,7 +86,7 @@ type Waypoint = {
 }
 type MultiSelectOption = { label: string; value: string; type?: BusType }
 type VehicleType = "hiace" | "coaster"
-type EventType = string // Simplified for brevity
+// type EventType = string // Simplified for brevity
 
 function fmtMoney(v: number | null | undefined, curr: string) {
   const n = Number(v ?? 0)
@@ -314,7 +314,7 @@ const EVENT_OPTIONS = [
   { value: "business_mission", label: "Mission Pro", group: "Travail" },
   { value: "airport_transfer", label: "Transfert Aéroport", group: "Transport" },
 ]
-export function EventCombobox({ value, onChange }: { value: EventType; onChange: (v: EventType) => void }) {
+export function EventCombobox({ value, onChange }: { value: ReservationEvent; onChange: (v: ReservationEvent) => void }) {
   const [open, setOpen] = React.useState(false)
   const current = EVENT_OPTIONS.find(o => o.value === value)
   return (
@@ -347,8 +347,8 @@ export default function AddEditReservationDialog({ open, onOpenChange, editing, 
   const [busIds, setBusIds] = React.useState<string[]>([])
   const [routeKm, setRouteKm] = React.useState<number | null>(null)
   const [useMap, setUseMap] = React.useState(false) // Toggle
+  const [eventType, setEventType] = React.useState<ReservationEvent>("none")
 
-  const [eventType, setEventType] = React.useState<EventType>("none")
   const [quoteCurrency, setQuoteCurrency] = React.useState<string>("FCFA")
   const [hiaceCount, setHiaceCount] = React.useState<number>(0)
   const [coasterCount, setCoasterCount] = React.useState<number>(0)
@@ -402,7 +402,7 @@ export default function AddEditReservationDialog({ open, onOpenChange, editing, 
     }
 
     setRouteKm((editing as any)?.distanceKm ?? 0)
-    setEventType(((editing as any)?.event as EventType) ?? "none")
+    setEventType(((editing as any)?.event as ReservationEvent) ?? "none")
 
     // Init Counts (if editing, assume the counts match assigned buses initially, or 0 if new)
     if (isEdit && ids.length > 0) {
@@ -495,9 +495,15 @@ export default function AddEditReservationDialog({ open, onOpenChange, editing, 
       event: eventType,
       seats: Number(form.seats ?? 1),
       priceTotal: Number(form.priceTotal ?? 0),
-      // @ts-ignore - custom fields
       distanceKm: distanceKmDisplay,
-      waypoints: waypoints.filter(w => !!w.label)
+      // Convertis explicitement pour satisfaire UIWaypoint
+      waypoints: waypoints
+        .filter(w => !!w.label)
+        .map(w => ({
+          lat: w.lat ?? 0,
+          lng: w.lng ?? 0,
+          label: w.label
+        }))
     }
     onSubmit(payload)
     onOpenChange(false)

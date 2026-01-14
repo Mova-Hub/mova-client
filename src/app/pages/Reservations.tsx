@@ -53,7 +53,8 @@ const EVENT_LABELS: Record<string, string> = {
 
 const frStatus = (s?: ReservationStatus | null) => (s ? (STATUS_LABELS[s] ?? s) : "—")
 const frEvent = (e?: string | null) => (e ? (EVENT_LABELS[e] ?? e) : "—")
-const frPayment = (p: ReservationPaymentStatus) => PAYMENT_LABELS[p] ?? p
+const frPayment = (p?: ReservationPaymentStatus | null) => 
+  p ? (PAYMENT_LABELS[p] ?? p) : "En attente" // Ou "—"
 
 /* ------------------------------- date utils -------------------------------- */
 // ... (parseSmartDate, fmtMoney, friendlyDateTime, etc. remain the same) ...
