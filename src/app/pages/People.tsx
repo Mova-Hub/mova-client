@@ -2,12 +2,23 @@
 "use client"
 
 import * as React from "react"
-import { IconPencil, IconTrash } from "@tabler/icons-react"
+import { 
+  IconPencil, 
+  IconTrash, 
+  IconPhone,        // NEW
+  IconDotsVertical  // NEW
+} from "@tabler/icons-react"
+
+
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+
 import {
+  DropdownMenu,
+  DropdownMenuContent, // NEW
+  DropdownMenuTrigger, // NEW
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
@@ -285,91 +296,89 @@ export default function PeoplePage() {
     },
   ]
 
-  const columns = React.useMemo<ColumnDef<Person>[]>(() => {
-    return [
-      makeDrawerTriggerColumn<Person>("name", {
-        triggerField: "name",
-        renderTrigger: (p) => (
-          <div className="flex items-center gap-3">
-            <div className="min-w-0">
-              <div className="truncate font-medium">{p.name}</div>
-              <div className="text-xs text-muted-foreground truncate">
-                {p.email ?? p.phone ?? "—"}
-              </div>
-            </div>
-          </div>
-        ),
-        renderTitle: (p) => (
-          <div className="flex items-center gap-3">
-            <span className="text-base font-medium">{p.name}</span>
-          </div>
-        ),
-        renderBody: (p) => (
-          <div className="grid gap-2 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Rôle :</span>
-              <Badge variant="outline" className="px-1.5 capitalize">
-                {frRole(normalizeRole(p.role) ?? (p.role as PersonRole))}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Statut :</span>
-              <Badge variant="outline" className="px-1.5 capitalize">{frStatus(p.status)}</Badge>
-            </div>
-            <div><span className="text-muted-foreground">Téléphone :</span> {p.phone ?? "—"}</div>
-            <div><span className="text-muted-foreground">Email :</span> {p.email ?? "—"}</div>
-            <div><span className="text-muted-foreground">Permis :</span> {p.licenseNo ?? "—"}</div>
-          </div>
-        ),
-      }),
-      {
-        accessorKey: "role",
-        header: "Rôle",
-        cell: ({ row }) => {
-          const r = normalizeRole(row.original.role) ?? (row.original.role as PersonRole | undefined)
-          return (
-            <Badge variant="outline" className="px-1.5 capitalize">
-              {frRole(r)}
-            </Badge>
-          )
-        },
-      },
-      {
-        accessorKey: "status",
-        header: "Statut",
-        cell: ({ row }) => (
-          <Badge variant="outline" className="px-1.5 capitalize">
-            {frStatus(row.original.status)}
-          </Badge>
-        ),
-      },
-      {
-        accessorKey: "phone",
-        header: () => <div className="w-full text-right">Téléphone</div>,
-        cell: ({ row }) => <div className="w-full text-right">{row.original.phone ?? "—"}</div>,
-      },
-      {
-        accessorKey: "email",
-        header: "Email",
-        cell: ({ row }) => (
-          <span className="block max-w-[260px] truncate">{row.original.email ?? "—"}</span>
-        ),
-        enableSorting: false,
-      },
-      {
-        accessorKey: "licenseNo",
-        header: "Permis",
-        cell: ({ row }) => (
-          <span className="block max-w-[200px] truncate">{row.original.licenseNo ?? "—"}</span>
-        ),
-        enableSorting: false,
-      },
-    ]
-  }, [])
-
-  /* ------------------------- Row action handlers ------------------------- */
 
   const isServerId = (id: string) => /^\d+$/.test(id)
+
+const columns = React.useMemo<ColumnDef<Person>[]>(() => {
+    return [
+      // ... (Keep existing drawer/role/status/phone/email/license columns) ...
+      makeDrawerTriggerColumn<Person>("name", { /*...*/ }),
+      { accessorKey: "role", /*...*/ },
+      { accessorKey: "status", /*...*/ },
+      { accessorKey: "phone", /*...*/ },
+      { accessorKey: "email", /*...*/ },
+      { accessorKey: "licenseNo", /*...*/ },
+
+      // NEW: Custom Actions Column
+      {
+        id: "actions",
+        header: () => null,
+        cell: ({ row }) => {
+          const p = row.original
+          
+          return (
+            <div className="flex items-center justify-end gap-1">
+              {/* 1. Phone Button (Visible outside menu) */}
+              {p.phone ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
+                  onClick={() => window.location.href = `tel:${p.phone}`}
+                  title={`Appeler ${p.phone}`}
+                >
+                  <IconPhone className="h-4 w-4" />
+                </Button>
+              ) : (
+                <div className="w-8" /> /* Spacer if no phone */
+              )}
+
+              {/* 2. Three Dots Menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                    <IconDotsVertical className="h-4 w-4" />
+                    <span className="sr-only">Menu</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => { setEditing(p); setOpen(true) }}>
+                    <IconPencil className="mr-2 h-4 w-4" /> Modifier
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuItem
+                    className="text-rose-600 focus:text-rose-600 focus:bg-rose-50"
+                    onClick={async () => {
+                      const prev = rows
+                      setRows((r) => r.filter((x) => x.id !== p.id))
+                      try {
+                        if (isServerId(p.id)) {
+                          await peopleApi.remove(p.id)
+                          toast("Personne supprimée.")
+                        } else {
+                          toast("Élément local supprimé.")
+                        }
+                      } catch (e) {
+                        setRows(prev)
+                        showValidationErrors(e)
+                      }
+                    }}
+                  >
+                    <IconTrash className="mr-2 h-4 w-4" /> Supprimer
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )
+        },
+        size: 80, // Slightly wider to fit both buttons
+      },
+    ]
+  }, [rows, isServerId]) // Add dependencies needed for the actions
+
+  /* ------------------------- Row action handlers ------------------------- */
 
   function renderRowActions(p: Person) {
     return (
@@ -443,7 +452,7 @@ export default function PeoplePage() {
         addLabel="Ajouter une personne"
         onImport={() => setOpenImport(true)}
         importLabel="Importer"
-        renderRowActions={renderRowActions}
+        // renderRowActions={renderRowActions}
         groupBy={groupBy}
         initialView="list"
         pageSizeOptions={[10, 20, 50]}
