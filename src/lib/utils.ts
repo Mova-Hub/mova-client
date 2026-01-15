@@ -19,3 +19,8 @@ export function step25Up(amount: number): number {
   // if it exactly hits 100, move to next hundred
   return nextStep === 100 ? amount - remainder + 100 : amount - remainder + nextStep;
 }
+
+// Helper to access nested properties safely (e.g., "passenger.name")
+export function getNestedValue(obj: any, path: string) {
+  return path.split(".").reduce((acc, part) => (acc ? acc[part] : undefined), obj)
+}

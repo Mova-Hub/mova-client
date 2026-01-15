@@ -71,7 +71,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
-import { cn } from "@/lib/utils"
+import { cn, getNestedValue } from "@/lib/utils"
 
 export type FilterConfig<T> = {
   id: string
@@ -262,16 +262,19 @@ export function DataTable<T extends object>({
     return map
   }, [data, filters, filterSelections, search, searchable])
 
-  /* ------------------------- Final filtered rows (same) ------------------------ */
+  /* ------------------------- Final filtered rows ------------------------ */
   const filteredRows = React.useMemo(() => {
     const q = search.trim().toLowerCase()
     return data.filter((row) => {
       const passSearch =
         !searchable || !q
           ? true
-          : searchable.fields.some((k) =>
-              String(row[k] ?? "").toLowerCase().includes(q)
-            )
+          : searchable.fields.some((k) => {
+              // FIX: Use helper for dot-notation keys
+              const val = getNestedValue(row, String(k))
+              return String(val ?? "").toLowerCase().includes(q)
+            })
+            
       const passFilters =
         !(filters && filters.length)
           ? true
@@ -492,173 +495,173 @@ export function DataTable<T extends object>({
     )
   }
 
-  function Toolbar() {
-    return (
-      <div className="mb-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* LEFT: Filters */}
-          <div className="flex flex-wrap items-center gap-2">
-            {filters?.map((f) => {
-              const selected = filterSelections[f.id] ?? ""
-              const counts = countsByFilter[f.id] ?? {}
-              const total = filteredRows.length
-              return (
-                <Select
-                  key={f.id}
-                  value={selected ? selected : ALL_TOKEN}
-                  onValueChange={(v) => setFilter(f.id, v === ALL_TOKEN ? "" : v)}
-                >
-                  <SelectTrigger
-                    className="w-[210px]"
-                    size="sm"
-                    aria-label={f.label}
-                  >
-                    <IconFilter className="mr-1 size-4 text-muted-foreground" />
-                    <SelectValue placeholder={f.label} />
-                  </SelectTrigger>
-                  <SelectContent align="start">
-                    <SelectItem value={ALL_TOKEN}>
-                      Tous {typeof total === "number" ? `(${total})` : ""}
-                    </SelectItem>
-                    {f.options.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label} ({counts[o.value] ?? 0})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )
-            })}
+  // function Toolbar() {
+  //   return (
+  //     <div className="mb-3">
+  //       <div className="flex flex-wrap items-center gap-2">
+  //         {/* LEFT: Filters */}
+  //         <div className="flex flex-wrap items-center gap-2">
+  //           {filters?.map((f) => {
+  //             const selected = filterSelections[f.id] ?? ""
+  //             const counts = countsByFilter[f.id] ?? {}
+  //             const total = filteredRows.length
+  //             return (
+  //               <Select
+  //                 key={f.id}
+  //                 value={selected ? selected : ALL_TOKEN}
+  //                 onValueChange={(v) => setFilter(f.id, v === ALL_TOKEN ? "" : v)}
+  //               >
+  //                 <SelectTrigger
+  //                   className="w-[210px]"
+  //                   size="sm"
+  //                   aria-label={f.label}
+  //                 >
+  //                   <IconFilter className="mr-1 size-4 text-muted-foreground" />
+  //                   <SelectValue placeholder={f.label} />
+  //                 </SelectTrigger>
+  //                 <SelectContent align="start">
+  //                   <SelectItem value={ALL_TOKEN}>
+  //                     Tous {typeof total === "number" ? `(${total})` : ""}
+  //                   </SelectItem>
+  //                   {f.options.map((o) => (
+  //                     <SelectItem key={o.value} value={o.value}>
+  //                       {o.label} ({counts[o.value] ?? 0})
+  //                     </SelectItem>
+  //                   ))}
+  //                 </SelectContent>
+  //               </Select>
+  //             )
+  //           })}
 
-            {/* Group By */}
-            {groupBy?.length ? (
-              <Select
-                value={groupId || "none"}
-                onValueChange={(v) => setGroupId(v === "none" ? "" : v)}
-              >
-                <SelectTrigger size="sm" className="w-[180px]">
-                  <IconChevronDown className="mr-1 size-4 text-muted-foreground" />
-                  <SelectValue placeholder="Group by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Group</SelectItem>
-                  {groupBy.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null}
+  //           {/* Group By */}
+  //           {groupBy?.length ? (
+  //             <Select
+  //               value={groupId || "none"}
+  //               onValueChange={(v) => setGroupId(v === "none" ? "" : v)}
+  //             >
+  //               <SelectTrigger size="sm" className="w-[180px]">
+  //                 <IconChevronDown className="mr-1 size-4 text-muted-foreground" />
+  //                 <SelectValue placeholder="Group by" />
+  //               </SelectTrigger>
+  //               <SelectContent>
+  //                 <SelectItem value="none">Group</SelectItem>
+  //                 {groupBy.map((g) => (
+  //                   <SelectItem key={g.id} value={g.id}>
+  //                     {g.label}
+  //                   </SelectItem>
+  //                 ))}
+  //               </SelectContent>
+  //             </Select>
+  //           ) : null}
 
-            {/* Active filter chips */}
-            <ActiveFilterChips />
-          </div>
+  //           {/* Active filter chips */}
+  //           <ActiveFilterChips />
+  //         </div>
 
-          {/* CENTER: Search Icon → Expanding Input */}
-          {searchable && (
-            <div className="mx-auto flex items-center">
-              <div
-                className={cn(
-                  "flex items-center rounded-md border bg-background transition-all",
-                  searchOpen ? "pr-2" : "border-transparent"
-                )}
-                onMouseDown={(e) => e.preventDefault()}
-              >
-                <Button
-                  type="button"
-                  variant={searchOpen ? "secondary" : "ghost"}
-                  size="icon"
-                  className="size-8"
-                  onClick={() => setSearchOpen((v) => !v)}
-                >
-                  <IconSearch className="size-4" />
-                </Button>
-                <Input
-                  ref={searchInputRef}
-                  className={cn(
-                    "border-none focus-visible:ring-0 focus-visible:ring-offset-0 transition-all placeholder:text-sm",
-                    searchOpen ? "w-40 sm:w-64 lg:w-80 opacity-100" : "w-0 p-0 opacity-0"
-                  )}
-                  placeholder={searchable.placeholder ?? "Search..."}
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onFocus={() => setSearchOpen(true)}
-                />
-                {searchOpen && searchInput && (
-                  <button
-                    className="rounded p-1 hover:bg-muted"
-                    onClick={() => {
-                      setSearchInput("")
-                      setSearch("")
-                      focusSearchSafely()
-                    }}
-                    aria-label="Clear search"
-                  >
-                    <IconX className="size-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+  //         {/* CENTER: Search Icon → Expanding Input */}
+  //         {searchable && (
+  //           <div className="mx-auto flex items-center">
+  //             <div
+  //               className={cn(
+  //                 "flex items-center rounded-md border bg-background transition-all",
+  //                 searchOpen ? "pr-2" : "border-transparent"
+  //               )}
+  //               onMouseDown={(e) => e.preventDefault()}
+  //             >
+  //               <Button
+  //                 type="button"
+  //                 variant={searchOpen ? "secondary" : "ghost"}
+  //                 size="icon"
+  //                 className="size-8"
+  //                 onClick={() => setSearchOpen((v) => !v)}
+  //               >
+  //                 <IconSearch className="size-4" />
+  //               </Button>
+  //               <Input
+  //                 ref={searchInputRef}
+  //                 className={cn(
+  //                   "border-none focus-visible:ring-0 focus-visible:ring-offset-0 transition-all placeholder:text-sm",
+  //                   searchOpen ? "w-40 sm:w-64 lg:w-80 opacity-100" : "w-0 p-0 opacity-0"
+  //                 )}
+  //                 placeholder={searchable.placeholder ?? "Search..."}
+  //                 value={searchInput}
+  //                 onChange={(e) => setSearchInput(e.target.value)}
+  //                 onFocus={() => setSearchOpen(true)}
+  //               />
+  //               {searchOpen && searchInput && (
+  //                 <button
+  //                   className="rounded p-1 hover:bg-muted"
+  //                   onClick={() => {
+  //                     setSearchInput("")
+  //                     setSearch("")
+  //                     focusSearchSafely()
+  //                   }}
+  //                   aria-label="Clear search"
+  //                 >
+  //                   <IconX className="size-4" />
+  //                 </button>
+  //               )}
+  //             </div>
+  //           </div>
+  //         )}
 
-          {/* RIGHT: View switch + Import + Delete + Add */}
-          <div className="ml-auto flex items-center gap-2">
-            {/* View */}
-            <div className="hidden sm:flex rounded-md border">
-              <Button
-                type="button"
-                variant={view === "list" ? "default" : "ghost"}
-                size="sm"
-                className="gap-1 rounded-r-none"
-                onClick={() => setView("list")}
-              >
-                <IconTable className="size-4" />
-                <span className="hidden md:inline">Liste</span>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="gap-1 rounded-l-none opacity-50 pointer-events-none"
-                disabled
-                title="Grid indisponible pour le moment"
-              >
-                <IconGridDots className="size-4" />
-                <span className="hidden md:inline">Grid</span>
-              </Button>
-            </div>
+  //         {/* RIGHT: View switch + Import + Delete + Add */}
+  //         <div className="ml-auto flex items-center gap-2">
+  //           {/* View */}
+  //           <div className="hidden sm:flex rounded-md border">
+  //             <Button
+  //               type="button"
+  //               variant={view === "list" ? "default" : "ghost"}
+  //               size="sm"
+  //               className="gap-1 rounded-r-none"
+  //               onClick={() => setView("list")}
+  //             >
+  //               <IconTable className="size-4" />
+  //               <span className="hidden md:inline">Liste</span>
+  //             </Button>
+  //             <Button
+  //               type="button"
+  //               variant="ghost"
+  //               size="sm"
+  //               className="gap-1 rounded-l-none opacity-50 pointer-events-none"
+  //               disabled
+  //               title="Grid indisponible pour le moment"
+  //             >
+  //               <IconGridDots className="size-4" />
+  //               <span className="hidden md:inline">Grid</span>
+  //             </Button>
+  //           </div>
 
-            {/* Delete selected */}
-            {onDeleteSelected && table.getFilteredSelectedRowModel().rows.length > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setOpenDelete(true)}
-              >
-                <IconTrash />
-                <span className="hidden lg:inline">
-                  Supprimer ({table.getFilteredSelectedRowModel().rows.length})
-                </span>
-              </Button>
-            )}
-            {onImport && (
-              <Button variant="outline" size="sm" onClick={onImport}>
-                <IconUpload />
-                <span className="hidden lg:inline">{importLabel}</span>
-              </Button>
-            )}
-            {onAdd && (
-              <Button variant="default" size="sm" onClick={onAdd}>
-                <IconPlus />
-                <span className="hidden lg:inline">{addLabel}</span>
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    )
-  }
+  //           {/* Delete selected */}
+  //           {onDeleteSelected && table.getFilteredSelectedRowModel().rows.length > 0 && (
+  //             <Button
+  //               variant="destructive"
+  //               size="sm"
+  //               onClick={() => setOpenDelete(true)}
+  //             >
+  //               <IconTrash />
+  //               <span className="hidden lg:inline">
+  //                 Supprimer ({table.getFilteredSelectedRowModel().rows.length})
+  //               </span>
+  //             </Button>
+  //           )}
+  //           {onImport && (
+  //             <Button variant="outline" size="sm" onClick={onImport}>
+  //               <IconUpload />
+  //               <span className="hidden lg:inline">{importLabel}</span>
+  //             </Button>
+  //           )}
+  //           {onAdd && (
+  //             <Button variant="default" size="sm" onClick={onAdd}>
+  //               <IconPlus />
+  //               <span className="hidden lg:inline">{addLabel}</span>
+  //             </Button>
+  //           )}
+  //         </div>
+  //       </div>
+  //     </div>
+  //   )
+  // }
 
   /* ------------------------------ Grid rendering (kept but unreachable) ------ */
   function AutoCard({ row }: { row: any }) {
@@ -734,7 +737,173 @@ export function DataTable<T extends object>({
   return (
     <div className="-mx-4 lg:-mx-6 w-full flex flex-col justify-start">
       <div className="pt-1 px-4 lg:px-6">
-        <Toolbar />
+        
+        {/* --- INLINED TOOLBAR START --- */}
+        <div className="mb-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* LEFT: Filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              {filters?.map((f) => {
+                const selected = filterSelections[f.id] ?? ""
+                const counts = countsByFilter[f.id] ?? {}
+                const total = filteredRows.length
+                return (
+                  <Select
+                    key={f.id}
+                    value={selected ? selected : ALL_TOKEN}
+                    onValueChange={(v) => setFilter(f.id, v === ALL_TOKEN ? "" : v)}
+                  >
+                    <SelectTrigger
+                      className="w-[210px]"
+                      size="sm"
+                      aria-label={f.label}
+                    >
+                      <IconFilter className="mr-1 size-4 text-muted-foreground" />
+                      <SelectValue placeholder={f.label} />
+                    </SelectTrigger>
+                    <SelectContent align="start">
+                      <SelectItem value={ALL_TOKEN}>
+                        Tous {typeof total === "number" ? `(${total})` : ""}
+                      </SelectItem>
+                      {f.options.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label} ({counts[o.value] ?? 0})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )
+              })}
+
+              {/* Group By */}
+              {groupBy?.length ? (
+                <Select
+                  value={groupId || "none"}
+                  onValueChange={(v) => setGroupId(v === "none" ? "" : v)}
+                >
+                  <SelectTrigger size="sm" className="w-[180px]">
+                    <IconChevronDown className="mr-1 size-4 text-muted-foreground" />
+                    <SelectValue placeholder="Group by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Group</SelectItem>
+                    {groupBy.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+
+              {/* Active filter chips */}
+              <ActiveFilterChips />
+            </div>
+
+            {/* CENTER: Search Icon → Expanding Input */}
+            {searchable && (
+              <div className="mx-auto flex items-center">
+                <div
+                  className={cn(
+                    "flex items-center rounded-md border bg-background transition-all",
+                    searchOpen ? "pr-2" : "border-transparent"
+                  )}
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  <Button
+                    type="button"
+                    variant={searchOpen ? "secondary" : "ghost"}
+                    size="icon"
+                    className="size-8"
+                    onClick={() => setSearchOpen((v) => !v)}
+                  >
+                    <IconSearch className="size-4" />
+                  </Button>
+                  <Input
+                    ref={searchInputRef}
+                    className={cn(
+                      "border-none focus-visible:ring-0 focus-visible:ring-offset-0 transition-all placeholder:text-sm",
+                      searchOpen ? "w-40 sm:w-64 lg:w-80 opacity-100" : "w-0 p-0 opacity-0"
+                    )}
+                    placeholder={searchable.placeholder ?? "Search..."}
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onFocus={() => setSearchOpen(true)}
+                  />
+                  {searchOpen && searchInput && (
+                    <button
+                      className="rounded p-1 hover:bg-muted"
+                      onClick={() => {
+                        setSearchInput("")
+                        setSearch("")
+                        focusSearchSafely()
+                      }}
+                      aria-label="Clear search"
+                    >
+                      <IconX className="size-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* RIGHT: View switch + Import + Delete + Add */}
+            <div className="ml-auto flex items-center gap-2">
+              {/* View */}
+              <div className="hidden sm:flex rounded-md border">
+                <Button
+                  type="button"
+                  variant={view === "list" ? "default" : "ghost"}
+                  size="sm"
+                  className="gap-1 rounded-r-none"
+                  onClick={() => setView("list")}
+                >
+                  <IconTable className="size-4" />
+                  <span className="hidden md:inline">Liste</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 rounded-l-none opacity-50 pointer-events-none"
+                  disabled
+                  title="Grid indisponible pour le moment"
+                >
+                  <IconGridDots className="size-4" />
+                  <span className="hidden md:inline">Grid</span>
+                </Button>
+              </div>
+
+              {/* Delete selected */}
+              {onDeleteSelected && table.getFilteredSelectedRowModel().rows.length > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setOpenDelete(true)}
+                >
+                  <IconTrash />
+                  <span className="hidden lg:inline">
+                    Supprimer ({table.getFilteredSelectedRowModel().rows.length})
+                  </span>
+                </Button>
+              )}
+              {onImport && (
+                <Button variant="outline" size="sm" onClick={onImport}>
+                  <IconUpload />
+                  <span className="hidden lg:inline">{importLabel}</span>
+                </Button>
+              )}
+              {onAdd && (
+                <Button variant="default" size="sm" onClick={onAdd}>
+                  <IconPlus />
+                  <span className="hidden lg:inline">{addLabel}</span>
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+        {/* --- INLINED TOOLBAR END --- */}
+
       </div>
 
       {/* LIST VIEW */}
