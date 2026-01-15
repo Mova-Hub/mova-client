@@ -552,21 +552,21 @@ export default function ReservationPage() {
       <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogTitle>Confirmer l'annulation</AlertDialogTitle>
             <AlertDialogDescription>
-              This will cancel the reservation <span className="font-mono font-bold text-foreground">{reservationToCancel?.code}</span> for <span className="font-semibold text-foreground">{reservationToCancel?.passenger?.name}</span>. 
-              The seats will be released, and this action is difficult to reverse.
+              Cette action annulera la réservation <span className="font-mono font-bold text-foreground">{reservationToCancel?.code}</span> au nom de <span className="font-semibold text-foreground">{reservationToCancel?.passenger?.name}</span>. 
+              Les bus seront remis en disponibilité et cette action est irréversible.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setReservationToCancel(null)}>
-              Go back
+              Retour
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleConfirmCancel}
               className="bg-amber-600 hover:bg-amber-700 focus:ring-amber-600"
             >
-              Yes, cancel reservation
+              Annuler la réservation
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
