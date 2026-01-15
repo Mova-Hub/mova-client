@@ -5,6 +5,17 @@ import * as React from "react"
 import { IconPencil, IconTrash, IconCash } from "@tabler/icons-react"
 import { toast } from "sonner"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 
@@ -141,6 +152,10 @@ export default function ReservationPage() {
   const [rows, setRows] = React.useState<UIReservation[]>([])
   const [open, setOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<UIReservation | null>(null)
+
+  // Confirm Cancel Dialog State
+  const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false)
+  const [reservationToCancel, setReservationToCancel] = React.useState<UIReservation | null>(null)
   
   // Payment Dialog State
   const [paymentOpen, setPaymentOpen] = React.useState(false)
@@ -165,6 +180,28 @@ export default function ReservationPage() {
       setLoading(false)
     }
   }, [])
+
+  const handleConfirmCancel = async () => {
+    if (!reservationToCancel) return
+
+    const r = reservationToCancel
+    const prev = rows
+    
+    // Optimistic UI update
+    setRows((xs) => xs.map((x) => (x.id === r.id ? { ...x, status: "cancelled" } : x)))
+    
+    try {
+      await reservationApi.setStatus(r.id, "cancelled")
+      toast.success(`Reservation ${r.code} has been cancelled.`)
+      await reload()
+    } catch (e: any) {
+      setRows(prev) // Rollback on error
+      toast.error(e?.message ?? "Failed to cancel reservation.")
+    } finally {
+      setCancelDialogOpen(false)
+      setReservationToCancel(null)
+    }
+  }
 
   React.useEffect(() => { reload() }, [reload])
 
@@ -311,18 +348,14 @@ export default function ReservationPage() {
         )}
 
         {r.paymentStatus !== 'paid' && !isCancelled && (
-          <DropdownMenuItem onClick={async () => {
-            const prev = rows
-            setRows((xs) => xs.map((x) => (x.id === r.id ? { ...x, status: "cancelled" } : x)))
-            try {
-              await reservationApi.setStatus(r.id, "cancelled")
-              toast("Réservation annulée")
-              await reload()
-            } catch (e: any) {
-              setRows(prev)
-              toast.error(e?.message ?? "Échec de l’annulation.")
-            }
-          }}>Annuler
+          <DropdownMenuItem 
+            className="text-amber-600 focus:text-amber-600"
+            onClick={() => { 
+              setReservationToCancel(r)
+              setCancelDialogOpen(true)
+            }}
+          >
+            Annuler
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
@@ -514,6 +547,30 @@ export default function ReservationPage() {
           }
         }}
       />
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will cancel the reservation <span className="font-mono font-bold text-foreground">{reservationToCancel?.code}</span> for <span className="font-semibold text-foreground">{reservationToCancel?.passenger?.name}</span>. 
+              The seats will be released, and this action is difficult to reverse.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setReservationToCancel(null)}>
+              Go back
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmCancel}
+              className="bg-amber-600 hover:bg-amber-700 focus:ring-amber-600"
+            >
+              Yes, cancel reservation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
