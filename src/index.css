@@ -39,6 +39,19 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Primary Color Shades */
+  --color-primary-50:  hsl(107, 52%, 95%);
+  --color-primary-100: hsl(107, 52%, 88%);
+  --color-primary-200: hsl(107, 52%, 75%);
+  --color-primary-300: hsl(107, 52%, 62%);
+  --color-primary-400: hsl(107, 52%, 53%);
+  --color-primary-500: hsl(107, 52%, 50%); /* base */
+  --color-primary-600: hsl(107, 52%, 44%);
+  --color-primary-700: hsl(107, 52%, 36%);
+  --color-primary-800: hsl(107, 52%, 28%);
+  --color-primary-900: hsl(107, 52%, 20%);
+
 }
 
 :root {

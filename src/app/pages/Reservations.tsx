@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { IconPencil, IconTrash, IconCash } from "@tabler/icons-react"
+import { IconPencil, IconTrash, IconCash, IconCheck, IconPlayerPlay, IconX } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import {
@@ -41,6 +41,8 @@ type EventType = string
 const STATUS_LABELS: Record<ReservationStatus, string> = {
   pending: "En attente",
   confirmed: "Confirmée",
+  in_progress: "En cours",
+  completed: "Terminée",
   cancelled: "Annulée",
 }
 
@@ -153,10 +155,15 @@ export default function ReservationPage() {
   const [open, setOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<UIReservation | null>(null)
 
-  // Confirm Cancel Dialog State
-  const [cancelDialogOpen, setCancelDialogOpen] = React.useState(false)
-  const [reservationToCancel, setReservationToCancel] = React.useState<UIReservation | null>(null)
-  
+  // Generic Status Change Dialog State
+  const [statusDialogOpen, setStatusDialogOpen] = React.useState(false)
+  const [statusTarget, setStatusTarget] = React.useState<UIReservation | null>(null)
+  const [targetStatus, setTargetStatus] = React.useState<ReservationStatus | null>(null)
+  const [dialogTitle, setDialogTitle] = React.useState("")
+  const [dialogDesc, setDialogDesc] = React.useState("")
+  const [buttonLabel, setButtonLabel] = React.useState("")
+  const [buttonColor, setButtonColor] = React.useState("")
+
   // Payment Dialog State
   const [paymentOpen, setPaymentOpen] = React.useState(false)
   const [paymentTarget, setPaymentTarget] = React.useState<UIReservation | null>(null)
@@ -181,25 +188,43 @@ export default function ReservationPage() {
     }
   }, [])
 
-  const handleConfirmCancel = async () => {
-    if (!reservationToCancel) return
+  const openStatusDialog = (
+    r: UIReservation,
+    newStatus: ReservationStatus,
+    title: string,
+    desc: string,
+    btnLabel: string,
+    btnColor: string
+  ) => {
+    setStatusTarget(r)
+    setTargetStatus(newStatus)
+    setDialogTitle(title)
+    setDialogDesc(desc)
+    setButtonLabel(btnLabel)
+    setButtonColor(btnColor)
+    setStatusDialogOpen(true)
+  }
 
-    const r = reservationToCancel
+  const handleStatusChange = async () => {
+    if (!statusTarget || !targetStatus) return
+
+    const r = statusTarget
     const prev = rows
     
     // Optimistic UI update
-    setRows((xs) => xs.map((x) => (x.id === r.id ? { ...x, status: "cancelled" } : x)))
+    setRows((xs) => xs.map((x) => (x.id === r.id ? { ...x, status: targetStatus } : x)))
     
     try {
-      await reservationApi.setStatus(r.id, "cancelled")
-      toast.success(`Reservation ${r.code} has been cancelled.`)
+      await reservationApi.setStatus(r.id, targetStatus)
+      toast.success(`Réservation ${r.code} mise à jour en ${frStatus(targetStatus)}.`)
       await reload()
     } catch (e: any) {
       setRows(prev) // Rollback on error
-      toast.error(e?.message ?? "Failed to cancel reservation.")
+      toast.error(e?.message ?? "Échec de la mise à jour du statut.")
     } finally {
-      setCancelDialogOpen(false)
-      setReservationToCancel(null)
+      setStatusDialogOpen(false)
+      setStatusTarget(null)
+      setTargetStatus(null)
     }
   }
 
@@ -312,7 +337,16 @@ export default function ReservationPage() {
       }, enableSorting: false },
     { accessorKey: "event", header: "Événement", cell: ({ row }) => <Badge variant="outline" className="px-1.5">{frEvent(row.original.event)}</Badge> },
     { id: "total", header: () => <div className="w-full text-right">Total</div>, cell: ({ row }) => <div className="w-full text-right">{fmtMoney(row.original.priceTotal)}</div> },
-    { accessorKey: "status", header: "Statut", cell: ({ row }) => <Badge variant="outline" className="px-1.5 capitalize">{frStatus(row.original.status)}</Badge> },
+    { accessorKey: "status", header: "Statut", cell: ({ row }) => {
+        const s = row.original.status
+        const color = s === 'pending' ? "border-amber-500 text-amber-600 bg-amber-50" :
+                      s === 'confirmed' ? "border-primary-500 text-primary-600 bg-primary-50" :
+                      s === 'in_progress' ? "border-indigo-500 text-indigo-600 bg-indigo-50" :
+                      s === 'completed' ? "border-emerald-500 text-emerald-600 bg-emerald-50" :
+                      "border-red-500 text-red-600 bg-red-50"
+        return <Badge variant="outline" className={`px-1.5 capitalize ${color}`}>{frStatus(s)}</Badge>
+      }
+    },
     
     // Updated Payment Column
     { 
@@ -336,43 +370,86 @@ export default function ReservationPage() {
 
   function renderRowActions(r: UIReservation) {
     const isCancelled = r.status === "cancelled"
+    const isCompleted = r.status === "completed"
     return (
       <>
-        <DropdownMenuItem onClick={() => { setEditing(r); setOpen(true) }}>Modifier</DropdownMenuItem>
-        
-        {/* Encaisser (Hidden if Paid or Cancelled) */}
-        {r.paymentStatus !== 'paid' && !isCancelled && (
+        <DropdownMenuItem className="cursor-pointer" onClick={() => { setEditing(r); setOpen(true) }}>
+          <IconPencil className="w-4 h-4 mr-2" /> Modifier
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+
+        {r.status === 'pending' && (
+          <DropdownMenuItem 
+            className="cursor-pointer"
+            onClick={() => openStatusDialog(
+              r, 
+              'confirmed', 
+              'Confirmer la réservation', 
+              `Cela marquera la réservation ${r.code} au nom de ${r.passenger?.name} comme confirmée et prête pour le voyage.`,
+              'Confirmer', 
+              'bg-green-600 hover:bg-green-700 focus:ring-green-600'
+            )}
+          >
+            <IconCheck className="w-4 h-4 mr-2 text-green-600" /> Confirmer
+          </DropdownMenuItem>
+        )}
+
+        {r.status === 'confirmed' && (
+          <DropdownMenuItem 
+            className="cursor-pointer"
+            onClick={() => openStatusDialog(
+              r, 
+              'in_progress', 
+              'Démarrer le voyage', 
+              `Cela indiquera que le voyage pour la réservation ${r.code} au nom de ${r.passenger?.name} a commencé.`,
+              'Démarrer', 
+              'bg-primary-600 hover:bg-primary-700 focus:ring-primary-600'
+            )}
+          >
+            <IconPlayerPlay className="w-4 h-4 mr-2" /> Démarrer le voyage
+          </DropdownMenuItem>
+        )}
+
+        {r.status === 'in_progress' && (
+          <DropdownMenuItem 
+            className="text-emerald-600 focus:text-emerald-600"
+            onClick={() => openStatusDialog(
+              r, 
+              'completed', 
+              'Terminer le voyage', 
+              `Cela marquera le voyage pour la réservation ${r.code} au nom de ${r.passenger?.name} comme terminé. Assurez-vous que tous les passagers sont arrivés.`,
+              'Terminer', 
+              'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-600'
+            )}
+          >
+            <IconCheck className="w-4 h-4 mr-2 text-emerald-600" /> Terminer le voyage
+          </DropdownMenuItem>
+        )}
+
+        {['pending', 'confirmed', 'in_progress'].includes(r.status) && (
+          <DropdownMenuItem 
+            className="cursor-pointer"
+            onClick={() => openStatusDialog(
+              r, 
+              'cancelled', 
+              'Annuler la réservation', 
+              `Cela annulera la réservation ${r.code} au nom de ${r.passenger?.name}. Les bus seront remis en disponibilité et cette action est irréversible.`,
+              'Annuler', 
+              'bg-amber-600 hover:bg-amber-700 focus:ring-amber-600'
+            )}
+          >
+            <IconX className="w-4 h-4 mr-2 text-amber-600" /> Annuler
+          </DropdownMenuItem>
+        )}
+
+        <DropdownMenuSeparator />
+
+        {/* Encaisser (Hidden if Paid or Cancelled/Completed) */}
+        {r.paymentStatus !== 'paid' && !isCancelled && !isCompleted && (
             <DropdownMenuItem onClick={() => { setPaymentTarget(r); setPaymentOpen(true) }}>
                 <IconCash className="w-4 h-4 mr-2 text-emerald-600" /> Encaisser
             </DropdownMenuItem>
         )}
-
-        {r.paymentStatus !== 'paid' && !isCancelled && (
-          <DropdownMenuItem 
-            className="text-amber-600 focus:text-amber-600"
-            onClick={() => { 
-              setReservationToCancel(r)
-              setCancelDialogOpen(true)
-            }}
-          >
-            Annuler
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator />
-
-        {/* <DropdownMenuItem className="text-rose-600" onClick={async () => {
-          const prev = rows
-          setRows((xs) => xs.filter((x) => x.id !== r.id))
-          try {
-            await reservationApi.remove(r.id)
-            toast("Réservation supprimée")
-            await reload()
-          } catch (e: any) {
-            setRows(prev)
-            toast.error(e?.message ?? "Échec de la suppression.")
-          }
-        }}>Supprimer
-        </DropdownMenuItem> */}
       </>
     )
   }
@@ -548,25 +625,24 @@ export default function ReservationPage() {
         }}
       />
 
-      {/* Confirmation Dialog */}
-      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+      {/* Generic Status Change Confirmation Dialog */}
+      <AlertDialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmer l'annulation</AlertDialogTitle>
+            <AlertDialogTitle>{dialogTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              Cette action annulera la réservation <span className="font-mono font-bold text-foreground">{reservationToCancel?.code}</span> au nom de <span className="font-semibold text-foreground">{reservationToCancel?.passenger?.name}</span>. 
-              Les bus seront remis en disponibilité et cette action est irréversible.
+              {dialogDesc}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setReservationToCancel(null)}>
+            <AlertDialogCancel className="cursor-pointer" onClick={() => setStatusTarget(null)}>
               Retour
             </AlertDialogCancel>
             <AlertDialogAction 
-              onClick={handleConfirmCancel}
-              className="bg-amber-600 hover:bg-amber-700 focus:ring-amber-600"
+              onClick={handleStatusChange}
+              className={`${buttonColor} cursor-pointer`}
             >
-              Annuler la réservation
+              {buttonLabel}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
