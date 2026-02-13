@@ -309,10 +309,46 @@ export function TripDateTimePicker({ valueIso, onChange }: { valueIso?: string; 
 /* --- EventCombobox --- */
 const EVENT_OPTIONS = [
   { value: "none", label: "Aucun" },
+
+  // Éducation
   { value: "school_trip", label: "Voyage scolaire", group: "Éducation" },
+  { value: "university_trip", label: "Voyage universitaire", group: "Éducation" },
+  { value: "educational_tour", label: "Visite éducative", group: "Éducation" },
+  { value: "student_transport", label: "Transport étudiant", group: "Éducation" },
+  { value: "school_competition", label: "Compétition scolaire", group: "Éducation" },
+
+  // Cérémonies & famille
   { value: "wedding", label: "Mariage", group: "Cérémonies" },
-  { value: "business_mission", label: "Mission Pro", group: "Travail" },
-  { value: "airport_transfer", label: "Transfert Aéroport", group: "Transport" },
+  { value: "funeral", label: "Funérailles", group: "Cérémonies" },
+  { value: "birthday", label: "Anniversaire", group: "Cérémonies" },
+  { value: "baptism", label: "Baptême", group: "Cérémonies" },
+  { value: "family_meeting", label: "Réunion de famille", group: "Cérémonies" },
+  { value: "pilgrimage", label: "Pèlerinage", group: "Cérémonies" },
+
+  // Pro / Officiel
+  { value: "conference", label: "Conférence", group: "Pro / Officiel" },
+  { value: "seminar", label: "Séminaire", group: "Pro / Officiel" },
+  { value: "company_trip", label: "Voyage d’entreprise", group: "Pro / Officiel" },
+  { value: "business_mission", label: "Mission professionnelle", group: "Pro / Officiel" },
+  { value: "staff_shuttle", label: "Navette du personnel", group: "Pro / Officiel" },
+  { value: "administrative_mission", label: "Mission administrative", group: "Pro / Officiel" },
+  { value: "official_trip", label: "Voyage officiel", group: "Pro / Officiel" },
+  { value: "election_campaign", label: "Campagne électorale", group: "Pro / Officiel" },
+
+  // Sport & Culture
+  { value: "football_match", label: "Match de football", group: "Sport & Culture" },
+  { value: "sports_tournament", label: "Tournoi sportif", group: "Sport & Culture" },
+  { value: "concert", label: "Concert", group: "Sport & Culture" },
+  { value: "festival", label: "Festival", group: "Sport & Culture" },
+
+  // Tourisme / Divers
+  { value: "tourist_trip", label: "Voyage touristique", group: "Tourisme / Divers" },
+  { value: "group_excursion", label: "Excursion de groupe", group: "Tourisme / Divers" },
+  { value: "site_visit", label: "Visite de site", group: "Tourisme / Divers" },
+  { value: "airport_transfer", label: "Transfert aéroport", group: "Tourisme / Divers" },
+  { value: "private_transport", label: "Transport privé", group: "Tourisme / Divers" },
+  { value: "special_event", label: "Événement spécial", group: "Tourisme / Divers" },
+  { value: "simple_rental", label: "Location simple", group: "Tourisme / Divers" },
 ]
 export function EventCombobox({ value, onChange }: { value: ReservationEvent; onChange: (v: ReservationEvent) => void }) {
   const [open, setOpen] = React.useState(false)

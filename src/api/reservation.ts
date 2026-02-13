@@ -3,7 +3,7 @@ import api, { buildQuery } from "@/api/apiService"
 
 /* ------------------------------- Server DTOs ------------------------------- */
 
-export type ReservationStatus = "pending" | "confirmed" | "cancelled"
+export type ReservationStatus = "pending" | "confirmed" | "in_progress" | "completed" | "cancelled"
 
 export type ReservationPaymentStatus = "pending" | "paid" | "failed" | "refunded"
 
