@@ -61,8 +61,8 @@ function EmptyState({
 }: { title?: string; description?: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
-      <div className="rounded-full ring-1 ring-border p-3">
-        <Inbox className="h-5 w-5" />
+      <div className="p-3 rounded-full ring-1 ring-border">
+        <Inbox className="w-5 h-5" />
       </div>
       <div className="space-y-1">
         <p className="text-sm font-medium">{title}</p>
@@ -169,7 +169,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                   alt="Mova"
                   width={50}
                   height={50}
-                  className="rounded-md mx-auto"
+                  className="mx-auto rounded-md"
                 />
               </NavLink>
             </SidebarMenuButton>
@@ -187,7 +187,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 tooltip="Tableau de bord"
               >
                 <NavLink to="/overview" aria-label="Tableau de bord" title="Tableau de bord">
-                  <IconGauge className="h-5 w-5" />
+                  <IconGauge className="w-5 h-5" />
                   <span className="sr-only">Tableau de bord</span>
                 </NavLink>
               </SidebarMenuButton>
@@ -204,12 +204,12 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             }}>
               <PopoverTrigger asChild>
                 <SidebarMenuButton
-                  className="justify-center p-2 relative"
+                  className="relative justify-center p-2"
                   aria-label="Notifications"
                   title="Notifications"
                   tooltip="Notifications"
                 >
-                  <IconBell className="h-5 w-5" />
+                  <IconBell className="w-5 h-5" />
                   {unreadCount > 0 && (
                     <span className="absolute top-1 right-1 flex h-3 w-3 items-center justify-center rounded-full bg-red-500 text-[8px] text-white">
                       {unreadCount > 9 ? '9+' : unreadCount}
@@ -222,7 +222,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 side="right"
                 align="start"
                 sideOffset={8}
-                className="w-80 p-0"
+                className="p-0 w-80"
               >
                 <div className="flex items-center justify-between px-4 py-3">
                   <div className="space-y-0.5">
@@ -272,7 +272,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                               {n.type ?? "info"}
                             </Badge>
                           </div>
-                          <div className="min-w-0 flex-1">
+                          <div className="flex-1 min-w-0">
                             <p className={cn("text-sm leading-5", n.unread ? "font-bold" : "font-medium text-muted-foreground")}>{n.title}</p>
                             {n.description && (
                               <p className={cn("mt-0.5 line-clamp-2 text-xs", n.unread ? "text-foreground" : "text-muted-foreground")}>
