@@ -228,7 +228,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                   <div className="space-y-0.5">
                     <p className="text-sm font-medium">Notifications</p>
                     <p className="text-xs text-muted-foreground">
-                      {unreadCount > 0 ? `${unreadCount} non lue(s)` : "Aucune non lue"}
+                      {unreadCount > 0 ? `${unreadCount} non lue(s)` : "Aucunes non lue"}
                     </p>
                   </div>
                   <button
@@ -298,4 +298,4 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       </SidebarFooter>
     </Sidebar>
   )
-}
+}7a8b03 (Initial commit)
