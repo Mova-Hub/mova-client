@@ -298,4 +298,4 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       </SidebarFooter>
     </Sidebar>
   )
-}7a8b03 (Initial commit)
+}
