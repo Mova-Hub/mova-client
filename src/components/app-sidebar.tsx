@@ -228,7 +228,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                   <div className="space-y-0.5">
                     <p className="text-sm font-medium">Notifications</p>
                     <p className="text-xs text-muted-foreground">
-                      {unreadCount > 0 ? `${unreadCount} non lue(s)` : "Aucunes non lue"}
+                      {unreadCount > 0 ? `${unreadCount} non lue(s)` : "Aucune non lue"}
                     </p>
                   </div>
                   <button
@@ -237,6 +237,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                     onClick={markAllRead}
                     disabled={unreadCount === 0}
                   >
+                    
                     Tout marquer lu
                   </button>
                 </div>
