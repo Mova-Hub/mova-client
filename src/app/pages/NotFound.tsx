@@ -11,6 +11,7 @@ import { Bus, Search, Home, ArrowLeft, Ticket, MapPinned, Settings, LifeBuoy } f
 
 export default function NotFound() {
   const navigate = useNavigate()
+  
   const [query, setQuery] = React.useState("")
 
   const onSearch = (e?: React.FormEvent) => {
