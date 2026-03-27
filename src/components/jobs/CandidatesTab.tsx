@@ -17,6 +17,7 @@ import type { FilterConfig, GroupByConfig } from "@/components/data-table"
 
 import jobApi, { type Candidate, type Job, getLabel, CANDIDATE_STATUSES, type CandidateStatus } from "@/api/job"
 import { ApiError } from "@/api/apiService"
+import { Button } from "../ui/button"
 
 export function CandidatesTab({ jobs }: { jobs: Job[] }) {
   const [rows, setRows] = React.useState<Candidate[]>([])
