@@ -26,6 +26,7 @@ const ALL_TABS: readonly Tab[] = [
   { to: "/orders", label: "Commandes" }, 
   { to: "/reservations", label: "Locations" },
   { to: "/staff", label: "Staff" }, // admin-only
+  { to: "/jobs", label: "Recrutement" }, // admin-only
 ] as const
 
 const ADMIN_ONLY_PATHS = new Set<string>(["/people", "/staff"])
@@ -34,9 +35,9 @@ const ADMIN_ONLY_PATHS = new Set<string>(["/people", "/staff"])
 function SecondaryHeadbar({ tabs }: { tabs: readonly Tab[] }) {
   return (
     <div className="z-30 w-full border-b bg-primary/5">
-      <div className="flex items-center justify-between px-4 sm:px-6 h-10 text-sm">
+      <div className="flex items-center justify-between h-10 px-4 text-sm sm:px-6">
         {/* Visible links on medium+ screens */}
-        <div className="hidden md:flex items-center gap-4">
+        <div className="items-center hidden gap-4 md:flex">
           {tabs.map((t) => (
             <NavLink
               key={t.to}
@@ -59,7 +60,7 @@ function SecondaryHeadbar({ tabs }: { tabs: readonly Tab[] }) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="flex items-center gap-1 text-sm">
-                <MoreHorizontal className="h-4 w-4" />
+                <MoreHorizontal className="w-4 h-4" />
                 <span>Plus</span>
               </Button>
             </DropdownMenuTrigger>
@@ -110,11 +111,11 @@ export function SiteHeader() {
       {/* Top header */}
       <header className="relative z-40 flex h-[56px] items-center border-b bg-background/80 backdrop-blur-md px-4 lg:px-6">
         {/* Mobile-only trigger to open the off-canvas sidebar */}
-        <SidebarTrigger className="-ml-1 mr-2 md:hidden" />
+        <SidebarTrigger className="mr-2 -ml-1 md:hidden" />
 
         {/* Center nav */}
-        <nav className="pointer-events-auto absolute left-1/2 -translate-x-1/2">
-          <ul className="flex items-center gap-2 p-1 bg-muted/50 rounded-md">
+        <nav className="absolute -translate-x-1/2 pointer-events-auto left-1/2">
+          <ul className="flex items-center gap-2 p-1 rounded-md bg-muted/50">
             <li>
               <NavLink
                 to="/"
@@ -159,7 +160,7 @@ export function SiteHeader() {
 
 
         {/* Right side — empty (notifications moved to sidebar) */}
-        <div className="ml-auto flex items-center gap-2" />
+        <div className="flex items-center gap-2 ml-auto" />
       </header>
 
       {/* Clean, responsive second nav (role-aware) */}

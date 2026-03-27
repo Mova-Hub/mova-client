@@ -10,6 +10,7 @@ import AppLayout from "@/layouts/AppLayout"
 import AuthLayout from "@/layouts/AuthLayout"
 import MapLayout from "@/layouts/MapLayout"
 import ReservationsMapPage from "@/app/pages/ReservationsMap"
+import JobsPage from "@/app/pages/Jobs"
 
 const Overview = React.lazy(() => import("@/app/pages/Overview"))
 const Reservations = React.lazy(() => import("@/app/pages/Reservations"))
@@ -98,6 +99,7 @@ export const router = createBrowserRouter([
                   { path: "overview", element: withSuspense(<Overview />) },
                   { path: "people", element: withSuspense(<People />) },
                   { path: "staff", element: withSuspense(<Staff />) },
+                  { path: "jobs", element: withSuspense(<JobsPage />) },
                   // { path: "settings", element: withSuspense(<Settings />) },
                 ],
               },

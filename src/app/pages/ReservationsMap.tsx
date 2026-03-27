@@ -1,110 +1,56 @@
 "use client"
 
 import * as React from "react"
-import mapboxgl from "mapbox-gl"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
+import { 
+  useJsApiLoader, 
+  GoogleMap, 
+  Autocomplete, 
+  DirectionsRenderer, 
+  OverlayViewF,
+  InfoWindowF
+} from '@react-google-maps/api'
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetTrigger,
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger,
 } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import {
-  Map as MapIcon,
-  ListChecks,
-  ArrowLeft,
-  Search as SearchIcon,
-  Undo2,
-  Save,
-  X,
-  MapPin,
-  Loader2,
-  Plus,
-  ArrowUp,
-  ArrowDown,
-  Trash2,
+  Map as MapIcon, ListChecks, ArrowLeft, Search as SearchIcon, Undo2, Save, X, MapPin, Plus, ArrowUp, ArrowDown, Trash2, Loader2
 } from "lucide-react"
 
 import reservationApi, { type UIReservation } from "@/api/reservation"
 import busApi, { type UIBus } from "@/api/bus"
 import AddEditReservationSheet from "@/components/reservation/AddEditReservationSheet"
 
-// Prefer env, fallback to your dev token
-const MAPBOX_TOKEN =
-  "pk.eyJ1IjoiYXJkZW4tYm91ZXQiLCJhIjoiY21maWgyY3dvMGF1YTJsc2UxYzliNnA0ZCJ9.XC5hXXwEa-NCUPpPtBdWCA"
-mapboxgl.accessToken = MAPBOX_TOKEN
+// Clé depuis l'environnement Vite
+const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ""
 
 type Waypoint = { lat: number; lng: number; label?: string }
 
-/* ------------------------------ Directions API ---------------------------- */
-type DirectionsResult = {
-  geometry: GeoJSON.LineString | null
-  distanceKm: number | null
-}
-
-async function getDrivingRoute(pts: Waypoint[], token: string): Promise<DirectionsResult> {
-  if (!token || pts.length < 2) return { geometry: null, distanceKm: null }
-  const coords = pts.map((p) => `${p.lng},${p.lat}`).join(";")
-  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coords}.json?geometries=geojson&overview=full&language=fr&access_token=${token}`
-  const r = await fetch(url)
-  if (!r.ok) return { geometry: null, distanceKm: null }
-  const j = await r.json()
-  const route = j?.routes?.[0]
-  if (!route?.geometry) return { geometry: null, distanceKm: null }
-  const km = typeof route.distance === "number" ? Math.round((route.distance / 1000) * 100) / 100 : null
-  return { geometry: route.geometry as GeoJSON.LineString, distanceKm: km }
+// 🛡️ SÉCURITÉ : Empêche le crash de Google Maps en filtrant les mauvaises coordonnées
+const isValidWp = (w: any): w is Waypoint => {
+  return w && typeof w.lat === "number" && !isNaN(w.lat) && typeof w.lng === "number" && !isNaN(w.lng)
 }
 
 const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("")
 
-/* ------------------------------ Geocoding (CG) ---------------------------- */
-const CG_BBOX: [number, number, number, number] = [11.1, -5.5, 18.8, 3.8]
-type GeoResult = { label: string; lat: number; lng: number }
-
-async function geocodeForwardCG(
-  q: string,
-  map: mapboxgl.Map | null,
-  token: string
-): Promise<GeoResult[]> {
-  if (!q || !token) return []
-  const center = map?.getCenter()
-  const prox = center ? `&proximity=${center.lng},${center.lat}` : ""
-  const bbox = `&bbox=${CG_BBOX.join(",")}`
-  const url =
-    `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json` +
-    `?access_token=${token}&limit=8&language=fr&fuzzyMatch=true${prox}${bbox}&country=CG` +
-    `&types=address,street,place,locality,neighborhood,poi`
-
-  const r = await fetch(url)
-  if (!r.ok) return []
-  const j: { features?: { place_name?: string; center?: [number, number] }[] } = await r.json()
-  return (j.features ?? [])
-    .filter((f) => Array.isArray(f.center) && typeof f.center[0] === "number" && typeof f.center[1] === "number")
-    .map((f) => ({
-      label: f.place_name || "Lieu",
-      lng: f.center![0],
-      lat: f.center![1],
-    }))
-}
-
-/* ---------------------------- Reverse Geocoding ---------------------------- */
-async function reverseGeocode(lng: number, lat: number, token: string) {
-  if (!token) return undefined
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&limit=1&language=fr`
-  const r = await fetch(url)
-  if (!r.ok) return undefined
-  const j = await r.json()
-  return j?.features?.[0]?.place_name as string | undefined
+/* ---------------------------- Reverse Geocoding (Google) ---------------------------- */
+async function reverseGeocode(lng: number, lat: number): Promise<string | undefined> {
+  if (!window.google) return undefined
+  const geocoder = new window.google.maps.Geocoder()
+  try {
+    const response = await geocoder.geocode({ location: { lat, lng } })
+    return response.results[0]?.formatted_address || response.results[1]?.formatted_address
+  } catch (e) {
+    return undefined
+  }
 }
 
 export default function ReservationsMapPage() {
@@ -114,49 +60,28 @@ export default function ReservationsMapPage() {
   const [query, setQuery] = React.useState("")
   const [openList, setOpenList] = React.useState(false)
 
-  // Selection
   const [selected, setSelected] = React.useState<UIReservation | null>(null)
-
-  // Big sheet
   const [openEditSheet, setOpenEditSheet] = React.useState(false)
   const [editing, setEditing] = React.useState<UIReservation | null>(null)
 
-  // Route edit mode
   const [routeEditMode, setRouteEditMode] = React.useState(false)
   const [draftWps, setDraftWps] = React.useState<Waypoint[] | null>(null)
   const [draftDistanceKm, setDraftDistanceKm] = React.useState<number | null>(null)
-
-  // Creation flow flag
   const [creatingNew, setCreatingNew] = React.useState(false)
 
-  // Map refs/state
-  const mapRef = React.useRef<mapboxgl.Map | null>(null)
-  const containerRef = React.useRef<HTMLDivElement | null>(null)
-  const markersRef = React.useRef<mapboxgl.Marker[]>([])
-  const popupRef = React.useRef<mapboxgl.Popup | null>(null)
-  const clickHandlerRef = React.useRef<((e: mapboxgl.MapMouseEvent) => void) | null>(null)
-  const [mapLoaded, setMapLoaded] = React.useState(false)
-  const [mapError, setMapError] = React.useState<string | null>(null)
-
-  // Route overlay for selected/draft
-  const routeSourceId = React.useRef(`route-src-${Math.random().toString(36).slice(2)}`)
-  const routeLayerId = React.useRef(`route-lyr-${Math.random().toString(36).slice(2)}`)
-
-  // Debounce directions
-  const routeDebounceRef = React.useRef<number | null>(null)
-
-  // Toolbar (main) open/close
   const [toolbarOpen, setToolbarOpen] = React.useState(false)
-
-  // Place Search FAB & bar
   const [placeBarOpen, setPlaceBarOpen] = React.useState(false)
-  const [placeQuery, setPlaceQuery] = React.useState("")
-  const [placeResults, setPlaceResults] = React.useState<GeoResult[]>([])
-  const [placeLoading, setPlaceLoading] = React.useState(false)
-  const searchMarkerRef = React.useRef<mapboxgl.Marker | null>(null)
-
-  // Waypoints side panel (for sorting/renaming while editing)
   const [showWpPanel, setShowWpPanel] = React.useState(false)
+
+  // 🗺️ Google Maps States
+  const [map, setMap] = React.useState<google.maps.Map | null>(null)
+  const [directionsData, setDirectionsData] = React.useState<google.maps.DirectionsResult | null>(null)
+  const [autocomplete, setAutocomplete] = React.useState<google.maps.places.Autocomplete | null>(null)
+
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: GOOGLE_MAPS_KEY,
+    libraries: ["places"],
+  })
 
   React.useEffect(() => {
     let alive = true
@@ -176,75 +101,9 @@ export default function ReservationsMapPage() {
         if (alive) setLoading(false)
       }
     })()
-    return () => {
-      alive = false
-    }
+    return () => { alive = false }
   }, [])
 
-  React.useEffect(() => {
-    if (typeof window === "undefined") return
-    if (!mapboxgl.supported?.()) {
-      setMapError("Mapbox GL is not supported in this browser/device.")
-      return
-    }
-    if (!containerRef.current || mapRef.current) return
-    if (!MAPBOX_TOKEN) {
-      setMapError("Mapbox token manquant. Configurez VITE_MAPBOX_TOKEN.")
-      return
-    }
-
-    try {
-      const map = new mapboxgl.Map({
-        container: containerRef.current,
-        style: "mapbox://styles/mapbox/streets-v12",
-        center: [15.2832, -4.2667], // Brazzaville approx
-        zoom: 12, // closer initial view
-        maxZoom: 19,
-        accessToken: MAPBOX_TOKEN,
-      })
-      mapRef.current = map
-
-      map.on("load", () => {
-        setMapLoaded(true)
-        map.resize()
-      })
-
-      map.on("error", (e) => {
-        const msg = (e?.error as Error)?.message || "Mapbox error"
-        setMapError(msg)
-      })
-
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => map.easeTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 12 }),
-          () => {}
-        )
-      }
-
-      const ro = new ResizeObserver(() => {
-        try {
-          map.resize()
-        } catch {}
-      })
-      ro.observe(containerRef.current)
-
-      return () => {
-        ro.disconnect()
-        popupRef.current?.remove()
-        if (clickHandlerRef.current) {
-          map.off("click", clickHandlerRef.current as any)
-          clickHandlerRef.current = null
-        }
-        searchMarkerRef.current?.remove()
-        map.remove()
-        mapRef.current = null
-      }
-    } catch (e: any) {
-      setMapError(e?.message ?? "Impossible d'initialiser la carte.")
-    }
-  }, [])
-
-  // Filtered rows
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return rows
@@ -256,417 +115,183 @@ export default function ReservationsMapPage() {
   }, [rows, query])
 
   const activeWps: Waypoint[] | undefined = React.useMemo(() => {
-    if (routeEditMode && draftWps) return draftWps
+    if (routeEditMode && draftWps) return draftWps.filter(isValidWp)
     const wps = (selected as any)?.waypoints as Waypoint[] | undefined
-    return wps
+    return wps?.filter(isValidWp)
   }, [routeEditMode, draftWps, selected])
 
-  /* ----------------------------- Marker rendering ----------------------------- */
+  /* ---------------------- Calcul d'itinéraire (Directions) ---------------------- */
   React.useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapLoaded) return
-
-    // clear previous markers + popup
-    markersRef.current.forEach((m) => m.remove())
-    markersRef.current = []
-    popupRef.current?.remove()
-    popupRef.current = null
-
-    // Focused route-editing mode: ONLY show draft points, hide other reservations and popup
-    if (routeEditMode) {
-      const wps = draftWps ?? []
-      const allLngLat: mapboxgl.LngLatLike[] = []
-
-      wps.forEach((wp, i) => {
-        allLngLat.push([wp.lng, wp.lat])
-
-        const el = document.createElement("div")
-        el.className =
-          i === 0
-            ? "rounded-full bg-primary text-primary-foreground text-[11px] px-2 py-1 shadow ring-1 ring-black/10"
-            : i === wps.length - 1
-            ? "rounded-full bg-secondary text-secondary-foreground text-[11px] px-2 py-1 shadow ring-1 ring-black/10"
-            : "rounded-full bg-muted text-foreground text-[10px] px-1.5 py-0.5 shadow ring-1 ring-black/10"
-        el.textContent = i === 0 ? "De" : i === wps.length - 1 ? "Ar" : alpha[i] ?? String(i + 1)
-
-        const marker = new mapboxgl.Marker({ element: el, draggable: true })
-          .setLngLat([wp.lng, wp.lat])
-          .addTo(map)
-
-        marker.on("dragend", async () => {
-          const pos = marker.getLngLat()
-          const newLabel = (await reverseGeocode(pos.lng, pos.lat, MAPBOX_TOKEN)) || (wps[i]?.label ?? `Point ${i + 1}`)
-          setDraftWps((prev) => {
-            if (!prev) return prev
-            const next = [...prev]
-            next[i] = { ...(next[i] || {}), lat: pos.lat, lng: pos.lng, label: newLabel }
-            return next
-          })
-        })
-
-        markersRef.current.push(marker)
-      })
-
-      // Fit bounds nicely
-      if (allLngLat.length === 1) {
-        const [lng, lat] = allLngLat[0] as [number, number]
-        requestAnimationFrame(() => {
-          try {
-            map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 14), duration: 500 })
-          } catch {}
-        })
-      } else if (allLngLat.length > 1) {
-        const b = new mapboxgl.LngLatBounds(allLngLat[0] as [number, number], allLngLat[0] as [number, number])
-        allLngLat.forEach((c) => b.extend(c as [number, number]))
-        requestAnimationFrame(() => {
-          try {
-            map.fitBounds(b, { padding: 60, maxZoom: 16, duration: 600 })
-          } catch {}
-        })
-      }
-      return // ← skip normal rendering while focused
-    }
-
-    const allLngLat: mapboxgl.LngLatLike[] = []
-
-    if (selected && activeWps?.length) {
-      activeWps.forEach((w) => allLngLat.push([w.lng, w.lat]))
-
-      // Start ("De")
-      const start = activeWps[0]
-      const elDe = document.createElement("div")
-      elDe.className =
-        "rounded-full bg-primary text-primary-foreground text-[11px] px-2 py-1 shadow ring-1 ring-black/10"
-      elDe.textContent = "De"
-      const mDe = new mapboxgl.Marker({ element: elDe, draggable: false })
-        .setLngLat([start.lng, start.lat])
-        .addTo(map)
-      markersRef.current.push(mDe)
-
-      // Intermediates
-      if (activeWps.length > 2) {
-        for (let i = 1; i < activeWps.length - 1; i++) {
-          const wp = activeWps[i]
-          const el = document.createElement("div")
-          el.className =
-            "rounded-full bg-muted text-foreground text-[10px] px-1.5 py-0.5 shadow ring-1 ring-black/10"
-          el.textContent = alpha[i + 1] ?? String(i + 1)
-          const m = new mapboxgl.Marker({ element: el, draggable: false })
-            .setLngLat([wp.lng, wp.lat])
-            .addTo(map)
-          markersRef.current.push(m)
-        }
-      }
-
-      // End ("Ar")
-      if (activeWps.length > 1) {
-        const end = activeWps[activeWps.length - 1]
-        const elAr = document.createElement("div")
-        elAr.className =
-          "rounded-full bg-secondary text-secondary-foreground text-[11px] px-2 py-1 shadow ring-1 ring-black/10"
-        elAr.textContent = "Ar"
-        const mAr = new mapboxgl.Marker({ element: elAr, draggable: false })
-          .setLngLat([end.lng, end.lat])
-          .addTo(map)
-        markersRef.current.push(mAr)
-      }
-
-      // Popup (view mode only)
-      if (start) {
-        const card = document.createElement("div")
-        card.className =
-          "w-[280px] sm:w-[320px] rounded-lg border bg-background shadow-lg overflow-hidden pointer-events-auto"
-        card.innerHTML = `
-          <div class="p-3">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <div class="text-sm text-muted-foreground">${selected.route?.from ?? "—"} → ${selected.route?.to ?? "—"}</div>
-                <div class="mt-1 font-medium">${selected.code}</div>
-              </div>
-              <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs capitalize">${selected.status}</span>
-            </div>
-            <div class="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-              <div><span class="font-medium text-foreground">Sièges:</span> ${selected.seats ?? "—"}</div>
-              <div><span class="font-medium text-foreground">Total:</span> ${
-                typeof selected.priceTotal === "number" ? `${selected.priceTotal.toLocaleString("fr-FR")} FCFA` : "—"
-              }</div>
-              <div class="col-span-2"><span class="font-medium text-foreground">Bus:</span> ${
-                (selected.busIds ?? []).join(", ") || "—"
-              }</div>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button id="popup-edit-route" class="inline-flex items-center rounded-md border px-3 py-1.5 text-sm hover:bg-accent">Éditer l’itinéraire</button>
-              <button id="popup-infos" class="inline-flex items-center rounded-md border px-3 py-1.5 text-sm hover:bg-accent">Infos</button>
-              <button id="popup-close" class="inline-flex items-center rounded-md border px-3 py-1.5 text-sm hover:bg-accent">Fermer</button>
-            </div>
-          </div>
-        `
-
-        const popup = new mapboxgl.Popup({
-          closeButton: false,
-          closeOnClick: false,
-          offset: 16,
-          anchor: "bottom",
-          className: "z-30",
-          maxWidth: "none",
-        })
-          .setDOMContent(card)
-          .setLngLat([start.lng, start.lat])
-          .addTo(map)
-
-        popupRef.current = popup
-
-        card.querySelector<HTMLButtonElement>("#popup-edit-route")?.addEventListener("click", () => {
-          const wps = (selected as any)?.waypoints as Waypoint[] | undefined
-          setDraftWps(wps ? JSON.parse(JSON.stringify(wps)) : [])
-          setDraftDistanceKm((selected as any)?.distanceKm ?? null)
-          setRouteEditMode(true)
-          setShowWpPanel(true)
-        })
-        card.querySelector<HTMLButtonElement>("#popup-infos")?.addEventListener("click", () => {
-          setEditing(selected)
-          setOpenEditSheet(true)
-        })
-        card.querySelector<HTMLButtonElement>("#popup-close")?.addEventListener("click", () => {
-          popupRef.current?.remove()
-          popupRef.current = null
-          setSelected(null)
-        })
-      }
-    } else {
-      // LIST VIEW: show "De" for each reservation
-      const allLngLat: mapboxgl.LngLatLike[] = []
-      filtered.forEach((r) => {
-        const wps = (r as any).waypoints as Waypoint[] | undefined
-        if (!wps || wps.length < 1) return
-        wps.forEach((w) => allLngLat.push([w.lng, w.lat]))
-
-        const start = wps[0]
-        const elDe = document.createElement("div")
-        elDe.className =
-          "rounded-full bg-primary text-primary-foreground text-[11px] px-2 py-1 shadow ring-1 ring-black/10"
-        elDe.textContent = "De"
-
-        const mDe = new mapboxgl.Marker({ element: elDe }).setLngLat([start.lng, start.lat]).addTo(map)
-        mDe.getElement().style.cursor = "pointer"
-        mDe.getElement().addEventListener("click", () => setSelected(r))
-        markersRef.current.push(mDe)
-      })
-
-      // Fit bounds for list view
-      if (allLngLat.length) {
-        if (allLngLat.length === 1) {
-          const [lng, lat] = allLngLat[0] as [number, number]
-          requestAnimationFrame(() => {
-            try {
-              map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 13), duration: 500 })
-            } catch {}
-          })
-        } else {
-          const bounds = new mapboxgl.LngLatBounds(
-            allLngLat[0] as [number, number],
-            allLngLat[0] as [number, number]
-          )
-          allLngLat.forEach((c) => bounds.extend(c as [number, number]))
-          const container = map.getContainer()
-          const w = container.clientWidth
-          const h = container.clientHeight
-          const basePadding = 60
-          const maxPad = Math.max(0, Math.floor(Math.min(w, h) / 2 - 4))
-          const safePadding = Math.min(basePadding, maxPad)
-          requestAnimationFrame(() => {
-            try {
-              if (safePadding > 0) map.fitBounds(bounds, { padding: safePadding, maxZoom: 16, duration: 600 })
-              else map.easeTo({ center: bounds.getCenter(), zoom: 13.5, duration: 500 })
-            } catch {
-              try {
-                map.easeTo({ center: bounds.getCenter(), zoom: 13.5, duration: 500 })
-              } catch {}
-            }
-          })
-        }
-      }
+    if (!isLoaded || !activeWps || activeWps.length < 2) {
+      setDirectionsData(null)
       return
     }
 
-    // If we rendered in selected-view above, also fit bounds
-    const allLngLatSelected: mapboxgl.LngLatLike[] = []
-    activeWps?.forEach((w) => allLngLatSelected.push([w.lng, w.lat]))
-    if (!allLngLatSelected.length) return
-    if (allLngLatSelected.length === 1) {
-      const [lng, lat] = allLngLatSelected[0] as [number, number]
-      requestAnimationFrame(() => {
-        try {
-          map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 13), duration: 500 })
-        } catch {}
-      })
-      return
-    }
-    const bounds = new mapboxgl.LngLatBounds(
-      allLngLatSelected[0] as [number, number],
-      allLngLatSelected[0] as [number, number]
-    )
-    allLngLatSelected.forEach((c) => bounds.extend(c as [number, number]))
+    const fetchDirections = async () => {
+      const directionsService = new window.google.maps.DirectionsService()
+      const origin = activeWps[0]
+      const destination = activeWps[activeWps.length - 1]
+      const waypoints = activeWps.slice(1, -1).map(p => ({
+        location: new window.google.maps.LatLng(p.lat, p.lng),
+        stopover: true
+      }))
 
-    const container = map.getContainer()
-    const w = container.clientWidth
-    const h = container.clientHeight
-    const basePadding = 60
-    const maxPad = Math.max(0, Math.floor(Math.min(w, h) / 2 - 4))
-    const safePadding = Math.min(basePadding, maxPad)
-
-    requestAnimationFrame(() => {
       try {
-        if (safePadding > 0) map.fitBounds(bounds, { padding: safePadding, maxZoom: 16, duration: 600 })
-        else map.easeTo({ center: bounds.getCenter(), zoom: 13.5, duration: 500 })
-      } catch {
-        try {
-          map.easeTo({ center: bounds.getCenter(), zoom: 13.5, duration: 500 })
-        } catch {}
+        const response = await directionsService.route({
+          origin: new window.google.maps.LatLng(origin.lat, origin.lng),
+          destination: new window.google.maps.LatLng(destination.lat, destination.lng),
+          waypoints,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        })
+        
+        setDirectionsData(response)
+
+        if (routeEditMode) {
+          let totalMeters = 0
+          response.routes[0].legs.forEach(leg => { totalMeters += leg.distance?.value || 0 })
+          setDraftDistanceKm(Math.round((totalMeters / 1000) * 100) / 100)
+        }
+      } catch (e) {
+        console.error("Erreur de calcul d'itinéraire", e)
       }
+    }
+
+    const timer = setTimeout(fetchDirections, 300)
+    return () => clearTimeout(timer)
+  }, [activeWps, isLoaded, routeEditMode])
+
+  /* ---------------------- Clic sur la carte ---------------------- */
+  const handleMapClick = async (e: google.maps.MapMouseEvent) => {
+    if (!routeEditMode || !e.latLng) return
+    const lat = e.latLng.lat()
+    const lng = e.latLng.lng()
+    
+    const name = (await reverseGeocode(lng, lat)) || `Étape ${(draftWps?.length ?? 0) + 1}`
+    
+    setDraftWps((prev) => {
+      const next = prev ? [...prev] : []
+      next.push({ lat, lng, label: name })
+      return next
     })
-  }, [filtered, selected, mapLoaded, routeEditMode, activeWps, draftWps])
+  }
 
-  /* ---------------------- Selected/draft route overlay (driving) ------------- */
+  const handlePlaceChanged = () => {
+    if (autocomplete !== null) {
+      const place = autocomplete.getPlace()
+      if (place.geometry?.location && map) {
+        map.panTo(place.geometry.location)
+        map.setZoom(15)
+        setPlaceBarOpen(false)
+      }
+    }
+  }
+
+  /* -------------------------- Ajustement de la caméra -------------------------- */
   React.useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapLoaded) return
-    const srcId = routeSourceId.current
-    const lyrId = routeLayerId.current
+    if (!map || !isLoaded) return
 
-    const ensure = () => {
-      if (!map.getSource(srcId)) {
-        const empty: GeoJSON.FeatureCollection<GeoJSON.LineString> = { type: "FeatureCollection", features: [] }
-        map.addSource(srcId, { type: "geojson", data: empty })
-      }
-      if (!map.getLayer(lyrId)) {
-        map.addLayer({
-          id: lyrId,
-          type: "line",
-          source: srcId,
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-width": 5, "line-color": "#2563eb", "line-opacity": 0.9 },
-        })
-      }
-    }
+    const bounds = new window.google.maps.LatLngBounds()
+    let hasPoints = false
 
-    const clear = () => {
-      const src = map.getSource(srcId) as mapboxgl.GeoJSONSource | undefined
-      if (src) src.setData({ type: "FeatureCollection", features: [] })
-    }
-
-    const wps = activeWps
-    if ((!selected && !creatingNew) || !wps || wps.length < 2) {
-      clear()
-      return
-    }
-
-    if (routeDebounceRef.current) window.clearTimeout(routeDebounceRef.current)
-    routeDebounceRef.current = window.setTimeout(async () => {
-      try {
-        ensure()
-        const { geometry, distanceKm } = await getDrivingRoute(wps, MAPBOX_TOKEN)
-        const src = map.getSource(srcId) as mapboxgl.GeoJSONSource | undefined
-        if (!src) return
-        const data: GeoJSON.FeatureCollection<GeoJSON.LineString> = {
-          type: "FeatureCollection",
-          features: geometry ? [{ type: "Feature", geometry, properties: {} }] : [],
+    if (activeWps && activeWps.length > 0) {
+      activeWps.forEach(wp => bounds.extend({ lat: wp.lat, lng: wp.lng }))
+      hasPoints = true
+    } else if (!selected && !routeEditMode && filtered.length > 0) {
+      filtered.forEach(r => {
+        const wps = ((r as any).waypoints as Waypoint[] | undefined)?.filter(isValidWp)
+        if (wps && wps.length > 0) {
+          bounds.extend({ lat: wps[0].lat, lng: wps[0].lng })
+          hasPoints = true
         }
-        src.setData(data)
-        if (routeEditMode) setDraftDistanceKm(distanceKm ?? null)
-      } catch {}
-    }, 300)
-
-    return () => {
-      if (routeDebounceRef.current) window.clearTimeout(routeDebounceRef.current)
-    }
-  }, [activeWps, selected, mapLoaded, routeEditMode, creatingNew])
-
-  /* ---------------------- Map click handler (edit mode) ---------------------- */
-  React.useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    if (clickHandlerRef.current) {
-      map.off("click", clickHandlerRef.current as any)
-      clickHandlerRef.current = null
-    }
-
-    if (!routeEditMode) return
-
-    const onClick = async (e: mapboxgl.MapMouseEvent) => {
-      const { lng, lat } = e.lngLat
-      const name = (await reverseGeocode(lng, lat, MAPBOX_TOKEN)) || `Point ${(draftWps?.length ?? 0) + 1}`
-      setDraftWps((prev) => {
-        const next = prev ? [...prev] : []
-        next.push({ lat, lng, label: name })
-        return next
       })
     }
 
-    map.on("click", onClick as any)
-    clickHandlerRef.current = onClick
-
-    return () => {
-      if (clickHandlerRef.current) {
-        map.off("click", clickHandlerRef.current as any)
-        clickHandlerRef.current = null
+    if (hasPoints) {
+      if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
+        map.panTo(bounds.getCenter())
+        map.setZoom(13)
+      } else {
+        map.fitBounds(bounds, { top: 60, bottom: 60, left: 60, right: 60 })
       }
     }
-  }, [routeEditMode, draftWps?.length])
+  }, [activeWps, filtered, selected, routeEditMode, map, isLoaded])
 
-  // Resize on UI changes
-  React.useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    const t = setTimeout(() => {
-      try {
-        map.resize()
-      } catch {}
-    }, 260)
-    return () => clearTimeout(t)
-  }, [openList, selected, openEditSheet, routeEditMode, toolbarOpen, placeBarOpen, showWpPanel])
-
-  /* -------------------------- Helpers -------------------------- */
+  /* -------------------------- Logique Métier -------------------------- */
   const busPlateById = React.useMemo(() => {
     const m = new Map<string, string>()
     for (const b of buses) if (b?.id) m.set(String(b.id), b.plate ?? String(b.id))
     return m
   }, [buses])
 
-  function RowItem({ r }: { r: UIReservation }) {
-    return (
-      <button
-        className="w-full text-left rounded-md border p-3 hover:bg-accent"
-        onClick={() => {
-          setSelected(r)
-          setOpenList(false)
-          const wps = (r as any).waypoints as Waypoint[] | undefined
-          if (wps?.length && mapRef.current) {
-            mapRef.current.easeTo({
-              center: [wps[0].lng, wps[0].lat],
-              zoom: Math.max(mapRef.current.getZoom(), 13),
-            })
-          }
-        }}
-      >
-        <div className="flex items-center justify-between">
-          <div className="font-medium">{r.code}</div>
-          <Badge variant="outline" className="capitalize">
-            {r.status}
-          </Badge>
-        </div>
-        <div className="mt-1 text-sm text-muted-foreground truncate">
-          {r.route?.from ?? "—"} → {r.route?.to ?? "—"}
-        </div>
-        <div className="mt-1 text-xs text-muted-foreground">
-          Bus: {(r.busIds ?? []).map((id) => busPlateById.get(String(id)) ?? String(id)).join(", ") || "—"} · Sièges: {r.seats ?? "—"}
-        </div>
-      </button>
-    )
+  function startCreationFlow() {
+    setSelected(null)
+    setDraftWps([])
+    setDraftDistanceKm(null)
+    setRouteEditMode(true)
+    setCreatingNew(true)
+    setShowWpPanel(true)
+    toast.info("Cliquez sur la carte pour ajouter le départ, l’arrivée et les étapes.")
   }
 
-  /* ----------------------- Waypoints side panel (edit) ---------------------- */
+  async function saveDraftRoute() {
+    if (creatingNew) {
+      if (!draftWps || draftWps.length < 2) {
+        toast.error("Ajoutez au moins un départ et une arrivée.")
+        return
+      }
+      const id = crypto.randomUUID()
+      const code = `BZV-${String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0")}`
+      const payload: UIReservation = {
+        id, code,
+        tripDate: new Date().toISOString().slice(0, 10),
+        route: { from: draftWps[0]?.label || "Départ", to: draftWps[draftWps.length - 1]?.label || "Arrivée" },
+        passenger: { name: "", phone: "" },
+        seats: 1, busIds: [], priceTotal: 0, status: "pending",
+        createdAt: new Date().toISOString(),
+        ...(draftDistanceKm != null ? ({ distanceKm: draftDistanceKm } as any) : {}),
+        ...(draftWps ? ({ waypoints: draftWps } as any) : {}),
+      }
+      setEditing(payload)
+      setOpenEditSheet(true)
+      setRouteEditMode(false)
+      setCreatingNew(false)
+      setShowWpPanel(false)
+      return
+    }
+
+    if (!selected || !draftWps?.length) {
+      setRouteEditMode(false)
+      return
+    }
+
+    const updated: UIReservation = {
+      ...selected,
+      ...(draftDistanceKm != null ? ({ distanceKm: draftDistanceKm } as any) : {}),
+      ...(draftWps ? ({ waypoints: draftWps } as any) : {}),
+      route: {
+        from: draftWps[0]?.label ?? selected.route?.from ?? "Départ",
+        to: draftWps[draftWps.length - 1]?.label ?? selected.route?.to ?? "Arrivée",
+      },
+    }
+
+    setRows((xs) => xs.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)))
+    setSelected(updated)
+
+    try {
+      await reservationApi.update(updated.id, updated)
+      toast.success("Itinéraire enregistré avec succès.")
+    } catch (e: any) {
+      toast.error("Échec de l’enregistrement de l’itinéraire.")
+    }
+
+    setEditing(updated)
+    setOpenEditSheet(true)
+    setRouteEditMode(false)
+    setDraftWps(null)
+    setShowWpPanel(false)
+  }
+
+  /* ----------------------- Fonctions Panneau Waypoints ---------------------- */
   function updateWpLabel(i: number, v: string) {
     setDraftWps((prev) => {
       if (!prev) return prev
@@ -695,87 +320,6 @@ export default function ReservationsMapPage() {
       return next
     })
   }
-
-  // Commit/cancel edit helpers
-  async function saveDraftRoute() {
-    // Creating new: confirm itinerary -> open sheet prefilled
-    if (creatingNew) {
-      if (!draftWps || draftWps.length < 2) {
-        toast.error("Ajoutez au moins un départ et une arrivée.")
-        return
-      }
-      const id = crypto.randomUUID()
-      const code = `BZV-${String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0")}`
-      const fromLabel = draftWps[0]?.label || "Départ"
-      const toLabel = draftWps[draftWps.length - 1]?.label || "Arrivée"
-
-      const payload: UIReservation = {
-        id,
-        code,
-        tripDate: new Date().toISOString().slice(0, 10),
-        route: { from: fromLabel, to: toLabel },
-        passenger: { name: "", phone: "" },
-        seats: 1,
-        busIds: [],
-        priceTotal: 0,
-        status: "pending",
-        createdAt: new Date().toISOString(),
-        ...(draftDistanceKm != null ? ({ distanceKm: draftDistanceKm } as any) : {}),
-        ...(draftWps ? ({ waypoints: draftWps } as any) : {}),
-      }
-
-      setEditing(payload)
-      setOpenEditSheet(true)
-      setRouteEditMode(false)
-      setCreatingNew(false)
-      setShowWpPanel(false)
-      return
-    }
-
-    // Editing existing
-    if (!selected || !draftWps?.length) {
-      setRouteEditMode(false)
-      setDraftWps(null)
-      setShowWpPanel(false)
-      return
-    }
-    const updated: UIReservation = {
-      ...selected,
-      ...(draftDistanceKm != null ? ({ distanceKm: draftDistanceKm } as any) : {}),
-      ...(draftWps ? ({ waypoints: draftWps } as any) : {}),
-      route: {
-        from: draftWps[0]?.label ?? selected.route?.from ?? "Départ",
-        to: draftWps[draftWps.length - 1]?.label ?? selected.route?.to ?? "Arrivée",
-      },
-    }
-
-    setRows((xs) => xs.map((x) => (x.id === updated.id ? { ...x, ...updated } : x)))
-    setSelected(updated)
-
-    try {
-      await reservationApi.update(updated.id, updated)
-      toast.success("Itinéraire enregistré.")
-    } catch (e: any) {
-      toast.error(e?.message ?? "Échec de l’enregistrement de l’itinéraire.")
-    }
-
-    // Seamless flow: go back to the sheet immediately after editing
-    setEditing(updated)
-    setOpenEditSheet(true)
-
-    setRouteEditMode(false)
-    setDraftWps(null)
-    setShowWpPanel(false)
-  }
-
-  function cancelDraftRoute() {
-    setRouteEditMode(false)
-    setDraftWps(null)
-    setDraftDistanceKm(null)
-    setCreatingNew(false)
-    setShowWpPanel(false)
-  }
-
   function undoLastPoint() {
     setDraftWps((prev) => {
       if (!prev || prev.length === 0) return prev
@@ -784,347 +328,180 @@ export default function ReservationsMapPage() {
       return next
     })
   }
-
   function recenterToDraft() {
-    const map = mapRef.current
     if (!map) return
     const wps = (routeEditMode ? draftWps : activeWps) ?? []
     if (wps.length === 0) return
     if (wps.length === 1) {
-      map.easeTo({ center: [wps[0].lng, wps[0].lat], zoom: Math.max(map.getZoom(), 13), duration: 400 })
+      map.panTo({ lat: wps[0].lat, lng: wps[0].lng })
+      map.setZoom(14)
       return
     }
-    const b = new mapboxgl.LngLatBounds([wps[0].lng, wps[0].lat], [wps[0].lng, wps[0].lat])
-    wps.forEach((p) => b.extend([p.lng, p.lat]))
-    map.fitBounds(b, { padding: 60, maxZoom: 15, duration: 500 })
+    const bounds = new window.google.maps.LatLngBounds()
+    wps.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }))
+    map.fitBounds(bounds, { top: 60, bottom: 60, left: 60, right: 60 })
   }
 
-  /* -------------------------- Place search logic --------------------------- */
-  React.useEffect(() => {
-    const q = placeQuery.trim()
-    if (!placeBarOpen) {
-      setPlaceResults([])
-      setPlaceLoading(false)
-      return
-    }
-    if (!q) {
-      setPlaceResults([])
-      setPlaceLoading(false)
-      return
-    }
-    const id = window.setTimeout(async () => {
-      setPlaceLoading(true)
-      try {
-        const res = await geocodeForwardCG(q, mapRef.current, MAPBOX_TOKEN)
-        setPlaceResults(res)
-      } finally {
-        setPlaceLoading(false)
-      }
-    }, 300)
-    return () => window.clearTimeout(id)
-  }, [placeQuery, placeBarOpen])
-
-  function focusResult(r: GeoResult) {
-    const map = mapRef.current
-    if (!map) return
-    searchMarkerRef.current?.remove()
-    const el = document.createElement("div")
-    el.className = "grid place-items-center rounded-full bg-white ring-1 ring-black/10 shadow size-8"
-    const dot = document.createElement("div")
-    dot.className = "size-3 rounded-full bg-primary"
-    el.appendChild(dot)
-    const mk = new mapboxgl.Marker({ element: el }).setLngLat([r.lng, r.lat]).addTo(map)
-    searchMarkerRef.current = mk
-    map.easeTo({ center: [r.lng, r.lat], zoom: Math.max(map.getZoom(), 15), duration: 600 })
-  }
-
-  /* -------------------------- Creation FAB handler -------------------------- */
-  function startCreationFlow() {
-    setSelected(null)
-    popupRef.current?.remove()
-    setDraftWps([])
-    setDraftDistanceKm(null)
-    setRouteEditMode(true)
-    setCreatingNew(true)
-    setShowWpPanel(true)
-    toast("Cliquez sur la carte pour ajouter le départ, l’arrivée et les étapes.")
-  }
+  if (loadError) return <div className="p-4 text-red-500">Erreur de chargement de Google Maps. Vérifiez votre clé d'API.</div>
+  if (!isLoaded) return <div className="flex items-center justify-center h-full"><Loader2 className="w-8 h-8 text-primary animate-spin" /></div>
 
   return (
-    <div className="relative h-full w-full min-h-0">
-      {/* Inline error banner */}
-      {mapError && (
-        <div className="absolute inset-x-0 top-0 z-30 m-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900">
-          <div className="text-sm">{mapError}</div>
-        </div>
-      )}
-
-      {/* MAIN FAB + Animated Toolbar */}
-      <div className="absolute left-4 top-4 z-20">
+    <div className="relative w-full h-full min-h-0">
+      
+      {/* -------------------- BARRE DE RECHERCHE PRINCIPALE -------------------- */}
+      <div className="absolute z-20 left-4 top-4">
         {!toolbarOpen && (
-          <button
-            type="button"
-            aria-label="Ouvrir la barre"
-            onClick={() => setToolbarOpen(true)}
-            className="grid size-12 place-items-center rounded-full bg-white shadow-lg ring-1 ring-black/10 transition hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <MapIcon className="h-5 w-5 text-foreground" />
+          <button type="button" onClick={() => setToolbarOpen(true)} className="grid transition bg-white rounded-full shadow-lg size-12 place-items-center ring-1 ring-black/10 hover:shadow-xl">
+            <MapIcon className="w-5 h-5 text-foreground" />
           </button>
         )}
-
         <AnimatePresence>
           {toolbarOpen && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95, x: -8 }}
               animate={{ opacity: 1, scale: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.95, x: -8 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="pointer-events-auto mt-0 flex w-[90vw] max-w-[720px] items-center gap-2 rounded-xl border bg-background/95 p-2 shadow-lg backdrop-blur supports-[backdrop-filter]:backdrop-blur"
+              className="flex items-center gap-2 p-2 border shadow-lg w-[90vw] max-w-[720px] rounded-xl bg-background/95 backdrop-blur"
             >
-              <div className="flex items-center gap-2 pl-1 pr-1">
-                <div className="grid size-8 place-items-center rounded-full bg-white ring-1 ring-black/10">
-                  <MapIcon className="h-4 w-4" />
-                </div>
-              </div>
-
-              <Separator orientation="vertical" className="mx-1 hidden h-5 sm:block" />
-
-              {/* Search in reservations */}
-              <div className="relative min-w-0 flex-1">
-                <SearchIcon className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Rechercher (code, passager, trajet, bus...)"
-                  className="w-full pl-8"
-                />
-              </div>
-
-              {/* List sheet trigger */}
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher une réservation..." className="w-full" />
               <Sheet open={openList} onOpenChange={setOpenList}>
                 <SheetTrigger asChild>
-                  <Button size="icon" variant="outline" className="shrink-0">
-                    <ListChecks className="h-4 w-4" />
-                    <span className="sr-only">Ouvrir la liste</span>
-                  </Button>
+                  <Button size="icon" variant="outline"><ListChecks className="w-4 h-4" /></Button>
                 </SheetTrigger>
-                <SheetContent side="right" className="w-[380px] sm:w-[420px]">
-                  <SheetHeader>
-                    <SheetTitle>Réservations ({filtered.length})</SheetTitle>
-                    <SheetDescription>
-                      Parcourez et sélectionnez pour centrer la carte et voir les détails.
-                    </SheetDescription>
-                  </SheetHeader>
-                  <div className="mt-4 space-y-2">
-                    <ScrollArea className="h-[calc(100vh-12rem)] pr-2">
-                      {loading && <div className="text-sm text-muted-foreground">Chargement…</div>}
-                      {!loading && filtered.length === 0 && (
-                        <div className="text-sm text-muted-foreground">Aucun résultat.</div>
-                      )}
-                      {!loading && filtered.map((r) => <RowItem key={r.id} r={r} />)}
-                    </ScrollArea>
-                  </div>
+                <SheetContent side="right">
+                  <SheetHeader><SheetTitle>Réservations ({filtered.length})</SheetTitle></SheetHeader>
+                  <ScrollArea className="h-[calc(100vh-10rem)] pr-2 mt-4">
+                    {filtered.map((r) => (
+                      <button
+                        key={r.id}
+                        className="w-full p-3 mb-2 text-left transition border rounded-lg hover:border-primary/50 hover:bg-accent"
+                        onClick={() => { setSelected(r); setOpenList(false) }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="font-bold">{r.code}</div>
+                          <Badge variant="outline">{r.status}</Badge>
+                        </div>
+                        <div className="mt-1 text-sm truncate text-muted-foreground">{r.route?.from ?? "—"} &rarr; {r.route?.to ?? "—"}</div>
+                      </button>
+                    ))}
+                  </ScrollArea>
                 </SheetContent>
               </Sheet>
-
-              {/* Back to list */}
-              <Button asChild size="sm" variant="ghost" className="shrink-0">
-                <Link to="/reservations" className="flex items-center gap-2">
-                  <ArrowLeft className="h-4 w-4" />
-                  <span className="hidden sm:inline">Retour à la liste</span>
-                </Link>
-              </Button>
-
-              {/* Close toolbar */}
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                aria-label="Fermer"
-                className="ml-1 shrink-0"
-                onClick={() => setToolbarOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              <Button onClick={() => setToolbarOpen(false)} size="icon" variant="ghost"><X className="w-4 h-4" /></Button>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* SECOND FAB: place search */}
-      <div className="absolute left-4 top-20 z-20">
+      {/* -------------------- RECHERCHE DE LIEU -------------------- */}
+      <div className="absolute z-20 left-4 top-20">
         {!placeBarOpen && (
-          <button
-            type="button"
-            aria-label="Ouvrir la recherche de lieux"
-            onClick={() => setPlaceBarOpen(true)}
-            className="grid size-12 place-items-center rounded-full bg-white shadow-lg ring-1 ring-black/10 transition hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary"
-          >
-            <SearchIcon className="h-5 w-5 text-foreground" />
+          <button onClick={() => setPlaceBarOpen(true)} className="grid transition bg-white rounded-full shadow-lg size-12 place-items-center ring-1 ring-black/10 hover:shadow-xl">
+            <SearchIcon className="w-5 h-5 text-foreground" />
           </button>
         )}
-
         <AnimatePresence>
           {placeBarOpen && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95, x: -8 }}
               animate={{ opacity: 1, scale: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.95, x: -8 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="pointer-events-auto mt-0 w-[90vw] max-w-[720px] rounded-xl border bg-background/95 p-2 shadow-lg backdrop-blur supports-[backdrop-filter]:backdrop-blur"
+              className="w-[90vw] max-w-[400px] p-2 border shadow-lg rounded-xl bg-background/95 backdrop-blur"
             >
               <div className="flex items-center gap-2">
-                <div className="grid size-8 shrink-0 place-items-center rounded-full bg-white ring-1 ring-black/10">
-                  <MapPin className="h-4 w-4" />
-                </div>
-                <div className="relative min-w-0 flex-1">
-                  <SearchIcon className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={placeQuery}
-                    onChange={(e) => setPlaceQuery(e.target.value)}
-                    placeholder="Chercher un lieu dans le Congo-Brazzaville (rue, adresse, ville…)"
-                    className="w-full pl-8"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  aria-label="Fermer"
-                  className="shrink-0"
-                  onClick={() => {
-                    setPlaceBarOpen(false)
-                    setPlaceQuery("")
-                    setPlaceResults([])
-                  }}
+                <Autocomplete 
+                  onLoad={setAutocomplete} 
+                  onPlaceChanged={handlePlaceChanged}
+                  options={{ componentRestrictions: { country: "CG" } }}
                 >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="relative">
-                <div className="absolute left-0 right-0 z-10 mt-2 rounded-md border bg-popover p-1 shadow">
-                  {placeLoading && (
-                    <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Recherche…
-                    </div>
-                  )}
-                  {!placeLoading && placeQuery && placeResults.length === 0 && (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      Aucun résultat (essayez un autre libellé).
-                    </div>
-                  )}
-                  {!placeLoading &&
-                    placeResults.map((r, i) => (
-                      <button
-                        key={`${r.lng}-${r.lat}-${i}`}
-                        type="button"
-                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
-                        onClick={() => focusResult(r)}
-                      >
-                        <MapPin className="h-4 w-4 opacity-70" />
-                        <span className="truncate">{r.label}</span>
-                      </button>
-                    ))}
-                </div>
+                  <Input placeholder="Rechercher une adresse au Congo..." className="flex-1 w-full" />
+                </Autocomplete>
+                <Button onClick={() => setPlaceBarOpen(false)} size="icon" variant="ghost"><X className="w-4 h-4" /></Button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* THIRD FAB: New reservation (under place search FAB) */}
-      <div className="absolute left-4 top-36 z-20">
-        <button
-          type="button"
-          aria-label="Nouvelle réservation"
-          onClick={startCreationFlow}
-          className="grid size-12 place-items-center rounded-full bg-white shadow-lg ring-1 ring-black/10 transition hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          <Plus className="h-5 w-5 text-foreground" />
+      {/* -------------------- NOUVELLE RÉSERVATION -------------------- */}
+      <div className="absolute z-20 left-4 top-36">
+        <button onClick={startCreationFlow} className="grid text-white transition rounded-full shadow-lg bg-primary size-12 place-items-center ring-1 ring-black/10 hover:shadow-xl hover:bg-primary/90">
+          <Plus className="w-5 h-5" />
         </button>
       </div>
 
-      {/* Floating Route Editor Toolbar (editing/creation) */}
+      {/* -------------------- TOOLBAR EDITION ROUTE -------------------- */}
       {routeEditMode && (
         <div className="absolute left-4 top-[168px] z-20 w-[min(680px,calc(100vw-2rem))]">
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background/95 p-2 shadow">
-            <Badge variant="secondary" className="px-2">
-              {draftWps?.length ?? 0} points
-            </Badge>
-            <Badge variant="outline" className="px-2">
-              {(draftDistanceKm ?? 0).toLocaleString("fr-FR")} km
-            </Badge>
-
-            <Separator orientation="vertical" className="mx-1 h-5" />
-
-            <Button size="sm" variant="outline" onClick={undoLastPoint}>
-              <Undo2 className="mr-2 h-4 w-4" />
-              Annuler le dernier
+          <div className="flex flex-wrap items-center gap-2 p-2 border rounded-lg shadow-lg bg-background/95 backdrop-blur">
+            <Badge variant="secondary" className="px-3 py-1 text-sm">{draftWps?.length ?? 0} étapes</Badge>
+            <Badge variant="outline" className="px-3 py-1 text-sm font-semibold">{(draftDistanceKm ?? 0).toLocaleString("fr-FR")} km</Badge>
+            <Separator orientation="vertical" className="h-6 mx-2" />
+            <Button size="sm" variant="ghost" onClick={undoLastPoint}><Undo2 className="w-4 h-4 mr-2" /> Annuler point</Button>
+            <Button size="sm" variant="ghost" onClick={recenterToDraft}>Recentrer</Button>
+            <Button size="sm" variant={showWpPanel ? "default" : "secondary"} onClick={() => setShowWpPanel(v => !v)}>
+              {showWpPanel ? "Masquer les détails" : "Gérer les points"}
             </Button>
-            <Button size="sm" variant="outline" onClick={recenterToDraft}>
-              Recentrer
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowWpPanel((v) => !v)}
-            >
-              {showWpPanel ? "Masquer" : "Voir"} les points
-            </Button>
-
-            <div className="ml-auto flex gap-2">
-              <Button size="sm" variant="outline" onClick={cancelDraftRoute}>
-                <X className="mr-2 h-4 w-4" />
-                Annuler
-              </Button>
-              <Button size="sm" onClick={saveDraftRoute}>
-                <Save className="mr-2 h-4 w-4" />
-                {creatingNew ? "Confirmer l’itinéraire" : "Enregistrer l’itinéraire"}
-              </Button>
+            <div className="flex gap-2 ml-auto">
+              <Button size="sm" variant="outline" onClick={() => { setRouteEditMode(false); setDraftWps(null); }}><X className="w-4 h-4 mr-1" /> Quitter</Button>
+              <Button size="sm" onClick={saveDraftRoute}><Save className="w-4 h-4 mr-2" /> Enregistrer</Button>
             </div>
-          </div>
-          <div className="mt-2 rounded-md border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-            Astuce : cliquez sur la carte pour ajouter un arrêt, faites glisser les marqueurs pour ajuster. Utilisez
-            « Annuler le dernier » pour retirer le dernier point. Ouvrez « Voir les points » pour renommer / réordonner.
           </div>
         </div>
       )}
 
-      {/* Waypoints side panel (rename/sort/delete) */}
+      {/* -------------------- PANNEAU LATÉRAL : TIMELINE DES WAYPOINTS -------------------- */}
       {routeEditMode && showWpPanel && (
-        <div className="absolute z-20 left-4 top-[260px] w-[min(520px,calc(100vw-2rem))] rounded-lg border bg-background/95 p-3 shadow">
-          <div className="mb-2 text-sm font-medium">Points de l’itinéraire</div>
-          <div className="max-h-[40vh] overflow-y-auto">
-            {(draftWps ?? []).length === 0 && (
-              <div className="text-sm text-muted-foreground">Cliquez sur la carte pour ajouter des points.</div>
+        <div className="absolute z-20 left-4 top-[240px] w-[min(420px,calc(100vw-2rem))] rounded-xl border bg-background/95 p-4 shadow-xl backdrop-blur">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-md">Itinéraire du trajet</h3>
+            <Badge variant="outline">{draftWps?.length || 0} étapes</Badge>
+          </div>
+          
+          <div className="max-h-[50vh] overflow-y-auto pr-2 pb-2 space-y-3 relative">
+            {(draftWps?.length || 0) > 1 && (
+              <div className="absolute top-4 bottom-4 left-[23px] w-0.5 bg-border -z-10" />
             )}
+
+            {(draftWps ?? []).length === 0 && (
+              <div className="p-8 text-sm text-center border border-dashed rounded-lg text-muted-foreground bg-muted/50">
+                <MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                Cliquez sur la carte pour ajouter votre point de départ.
+              </div>
+            )}
+
             {(draftWps ?? []).map((wp, idx) => (
-              <div key={`${wp.lat}-${wp.lng}-${idx}`} className="mb-2 flex items-center gap-2">
-                <Badge variant="secondary" className="shrink-0">
-                  {alpha[idx] ?? idx + 1}
-                </Badge>
-                <Input
-                  value={wp.label ?? ""}
-                  onChange={(e) => updateWpLabel(idx, e.target.value)}
-                  className="flex-1"
-                />
-                <div className="flex items-center gap-1">
-                  <Button size="icon" variant="ghost" onClick={() => moveWp(idx, -1)} disabled={idx === 0}>
-                    <ArrowUp className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => moveWp(idx, +1)}
-                    disabled={idx === (draftWps?.length ?? 0) - 1}
-                  >
-                    <ArrowDown className="h-4 w-4" />
-                  </Button>
-                  <Button size="icon" variant="ghost" className="text-destructive" onClick={() => removeWp(idx)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+              <div key={idx} className="flex items-start gap-3 p-2 transition border rounded-lg shadow-sm bg-card hover:border-primary/50 group">
+                <div className="flex flex-col items-center mt-1">
+                  <div className="grid w-8 h-8 text-xs font-bold rounded-full place-items-center ring-2 ring-background bg-primary text-primary-foreground">
+                    {idx === 0 ? "De" : idx === (draftWps?.length ?? 0) - 1 ? "Ar" : alpha[idx]}
+                  </div>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <Input 
+                    value={wp.label ?? ""} 
+                    onChange={(e) => updateWpLabel(idx, e.target.value)} 
+                    placeholder="Nom du lieu..."
+                    className="h-8 font-medium bg-transparent border-transparent px-1.5 hover:border-border focus-visible:bg-background"
+                  />
+                  <div className="flex items-center gap-1 mt-2 text-muted-foreground">
+                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded mr-auto">
+                      {wp.lat.toFixed(4)}, {wp.lng.toFixed(4)}
+                    </span>
+                    <div className="flex items-center transition-opacity opacity-0 group-hover:opacity-100">
+                      <Button size="icon" variant="ghost" className="w-6 h-6" onClick={() => moveWp(idx, -1)} disabled={idx === 0}>
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="w-6 h-6" onClick={() => moveWp(idx, +1)} disabled={idx === (draftWps?.length ?? 0) - 1}>
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </Button>
+                      <Separator orientation="vertical" className="h-4 mx-1" />
+                      <Button size="icon" variant="ghost" className="w-6 h-6 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => removeWp(idx)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
@@ -1132,60 +509,158 @@ export default function ReservationsMapPage() {
         </div>
       )}
 
-      {/* Map container */}
-      <div ref={containerRef} className="absolute inset-0 bg-muted" style={{ minHeight: "100vh" }} />
+      {/* -------------------- GOOGLE MAPS COMPONENTS -------------------- */}
+      <div className="absolute inset-0 bg-muted" style={{ minHeight: "100vh" }}>
+        <GoogleMap
+          mapContainerStyle={{ width: '100%', height: '100%' }}
+          center={{ lat: -4.2667, lng: 15.2832 }}
+          zoom={12}
+          onClick={handleMapClick}
+          onLoad={setMap}
+          options={{
+            disableDefaultUI: true,
+            zoomControl: true,
+            gestureHandling: "greedy"
+          }}
+        >
+          {/* Ligne de Trajet avec ta couleur Primary exacte */}
+          {directionsData && (
+            <DirectionsRenderer 
+              directions={directionsData} 
+              options={{ 
+                suppressMarkers: true, 
+                polylineOptions: { strokeColor: "hsl(107, 52%, 50%)", strokeWeight: 5, strokeOpacity: 0.9 } 
+              }} 
+            />
+          )}
 
-      {/* Big Add/Edit sheet */}
+          {/* Marqueurs en mode Édition */}
+          {routeEditMode && activeWps?.map((wp, i) => (
+            <OverlayViewF
+              key={`draft-${i}`}
+              position={{ lat: wp.lat, lng: wp.lng }}
+              mapPaneName="overlayMouseTarget"
+              getPixelPositionOffset={(width, height) => ({ x: -(width / 2), y: -(height) })} 
+            >
+              <div className="flex flex-col items-center pointer-events-none">
+                <div className="rounded-full bg-primary text-primary-foreground font-bold text-[11px] px-2.5 py-1 shadow-md ring-2 ring-white whitespace-nowrap">
+                  {i === 0 ? "De" : i === activeWps.length - 1 ? "Ar" : alpha[i] || String(i + 1)}
+                </div>
+                {/* Petit pointeur SVG avec la couleur text-primary */}
+                <div className="text-primary drop-shadow-sm -mt-[1px]">
+                   <svg width="12" height="6" viewBox="0 0 12 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                     <path d="M0 0H12L6 6L0 0Z" />
+                   </svg>
+                </div>
+              </div>
+            </OverlayViewF>
+          ))}
+
+          {/* Marqueurs pour la Réservation Sélectionnée */}
+          {!routeEditMode && selected && activeWps?.map((wp, i) => (
+             <OverlayViewF
+                key={`selected-${i}`}
+                position={{ lat: wp.lat, lng: wp.lng }}
+                mapPaneName="overlayMouseTarget"
+                getPixelPositionOffset={(width, height) => ({ x: -(width / 2), y: -(height) })}
+             >
+              <div className="flex flex-col items-center pointer-events-none">
+                <div className="rounded-full bg-primary text-primary-foreground font-bold text-[11px] px-2.5 py-1 shadow-md ring-2 ring-white whitespace-nowrap">
+                  {i === 0 ? "De" : i === activeWps.length - 1 ? "Ar" : alpha[i] || String(i + 1)}
+                </div>
+                <div className="text-primary drop-shadow-sm -mt-[1px]">
+                   <svg width="12" height="6" viewBox="0 0 12 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                     <path d="M0 0H12L6 6L0 0Z" />
+                   </svg>
+                </div>
+              </div>
+             </OverlayViewF>
+          ))}
+
+          {/* Marqueurs Liste Globale ("De") */}
+          {!routeEditMode && !selected && filtered.map((r) => {
+            const wps = ((r as any).waypoints as Waypoint[] | undefined)?.filter(isValidWp)
+            if (!wps || wps.length === 0) return null
+            return (
+              <OverlayViewF
+                key={`list-${r.id}`}
+                position={{ lat: wps[0].lat, lng: wps[0].lng }}
+                mapPaneName="overlayMouseTarget"
+                getPixelPositionOffset={(width, height) => ({ x: -(width / 2), y: -(height) })}
+              >
+                <div 
+                  className="flex flex-col items-center cursor-pointer group"
+                  onClick={(e) => { e.stopPropagation(); setSelected(r); }}
+                >
+                  <div className="px-2 py-1 text-xs font-bold transition rounded-full shadow-md bg-primary text-primary-foreground ring-2 ring-white group-hover:scale-110 whitespace-nowrap">
+                    Départ
+                  </div>
+                  <div className="text-primary drop-shadow-sm -mt-[1px] group-hover:scale-110 transition origin-top">
+                     <svg width="12" height="6" viewBox="0 0 12 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                       <path d="M0 0H12L6 6L0 0Z" />
+                     </svg>
+                  </div>
+                </div>
+              </OverlayViewF>
+            )
+          })}
+
+          {/* Pop-up Info (Bulle) au-dessus de la réservation sélectionnée */}
+          {!routeEditMode && selected && activeWps && activeWps.length > 0 && (
+            <InfoWindowF
+              position={{ lat: activeWps[0].lat, lng: activeWps[0].lng }}
+              onCloseClick={() => setSelected(null)}
+              options={{ disableAutoPan: true, pixelOffset: new window.google.maps.Size(0, -35) }} 
+            >
+              <div className="w-[280px] p-1 font-sans text-black">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="min-w-0 pr-2">
+                    <div className="text-xs font-semibold text-gray-500 uppercase truncate">{selected.route?.from ?? "—"} &rarr; {selected.route?.to ?? "—"}</div>
+                    <div className="mt-1 text-base font-bold truncate">{selected.code}</div>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0">{selected.status}</Badge>
+                </div>
+                <Separator className="my-2" />
+                <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+                  <div><span className="text-gray-500">Passagers:</span> {selected.seats}</div>
+                  <div><span className="text-gray-500">Prix:</span> {selected.priceTotal ? `${selected.priceTotal.toLocaleString()} F` : "—"}</div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="flex-1" onClick={() => {
+                     setEditing(selected)
+                     setOpenEditSheet(true)
+                  }}>Ouvrir le dossier</Button>
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => {
+                    const wps = (selected as any)?.waypoints as Waypoint[] | undefined
+                    setDraftWps(wps ? JSON.parse(JSON.stringify(wps)) : [])
+                    setRouteEditMode(true)
+                    setShowWpPanel(true)
+                  }}>Éditer l'itinéraire</Button>
+                </div>
+              </div>
+            </InfoWindowF>
+          )}
+
+        </GoogleMap>
+      </div>
+
       <AddEditReservationSheet
         open={openEditSheet}
         onOpenChange={(v) => {
           setOpenEditSheet(v)
-          // if closing sheet during creation without saving, reset creation flags
-          if (!v && creatingNew) {
-            setCreatingNew(false)
-          }
+          if (!v && creatingNew) setCreatingNew(false)
         }}
         editing={editing}
-        onSubmit={async (res) => {
-          // create or update depending on presence in list
-          const exists = rows.some((r) => r.id === res.id)
-          if (exists) {
-            // optimistic
-            setRows((xs) => xs.map((x) => (x.id === res.id ? { ...x, ...res } : x)))
-            try {
-              const saved = await reservationApi.update(res.id, res)
-              setRows((xs) => xs.map((x) => (x.id === res.id ? saved.data : x)))
-              toast.success("Réservation mise à jour.")
-              setEditing(null)
-              setSelected((s) => (s && s.id === res.id ? saved.data : s))
-            } catch (e: any) {
-              toast.error(e?.message ?? "Échec de la mise à jour.")
-            }
-          } else {
-            try {
-              const created = await reservationApi.create(res)
-              setRows((xs) => [created.data, ...xs])
-              toast.success("Réservation ajoutée.")
-              setEditing(null)
-              setSelected(created.data)
-            } catch (e: any) {
-              toast.error(e?.message ?? "Échec de la création.")
-            }
-          }
-          setCreatingNew(false)
-        }}
+        onSubmit={async () => setCreatingNew(false)}
         buses={buses as unknown as any[]}
         onEditItinerary={() => {
           if (!editing) return
-          // jump back to map editor with current itinerary
           const wps = (editing as any).waypoints as Waypoint[] | undefined
           setDraftWps(wps ? JSON.parse(JSON.stringify(wps)) : [])
-          setDraftDistanceKm((editing as any)?.distanceKm ?? null)
           setRouteEditMode(true)
           setCreatingNew(false)
           setShowWpPanel(true)
           setOpenEditSheet(false)
-          setSelected(editing) // keep context on map
         }}
       />
     </div>
