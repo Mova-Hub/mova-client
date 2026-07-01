@@ -13,6 +13,7 @@ import {
 
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
+import type { FilterConfig, GroupByConfig } from "@/components/data-table"
 
 import clientApi, { type Client } from "@/api/client"
 import { ApiError } from "@/api/apiService"
@@ -86,7 +87,69 @@ export default function ClientsPage() {
     },
   ], [])
 
-/* ---------------- Actions ---------------- */
+  /* ---------------- Filters & GroupBy ---------------- */
+  const filters: FilterConfig<Client>[] = [
+    {
+      id: "hasEmail",
+      label: "Email",
+      options: [
+        { label: "Avec email", value: "yes" },
+        { label: "Sans email", value: "no" },
+      ],
+      accessor: (c) => (c.email ? "yes" : "no"),
+    },
+    {
+      id: "activity",
+      label: "Connexion",
+      options: [
+        { label: "Déjà connecté", value: "connected" },
+        { label: "Jamais connecté", value: "never" },
+      ],
+      accessor: (c) => (c.lastLoginAt ? "connected" : "never"),
+    },
+  ]
+
+  const groupBy: GroupByConfig<Client>[] = [
+    {
+      id: "orders",
+      label: "Nombre de commandes",
+      accessor: (c) => {
+        const n = c.ordersCount ?? 0
+        if (n === 0) return "Aucune commande"
+        if (n <= 3) return "1 – 3 commandes"
+        if (n <= 10) return "4 – 10 commandes"
+        return "10+ commandes"
+      },
+      sortGroups: (a, b) => {
+        const order = ["Aucune commande", "1 – 3 commandes", "4 – 10 commandes", "10+ commandes"]
+        return (order.indexOf(a) ?? 99) - (order.indexOf(b) ?? 99)
+      },
+    },
+    {
+      id: "activity",
+      label: "Activité récente",
+      accessor: (c) => {
+        if (!c.lastLoginAt) return "Jamais connecté"
+        const days = Math.floor(
+          (Date.now() - new Date(c.lastLoginAt).getTime()) / 86_400_000
+        )
+        if (days <= 7) return "Actif (7 derniers jours)"
+        if (days <= 30) return "Actif (30 derniers jours)"
+        return "Inactif (> 30 jours)"
+      },
+      sortGroups: (a, b) => {
+        const order = [
+          "Actif (7 derniers jours)",
+          "Actif (30 derniers jours)",
+          "Inactif (> 30 jours)",
+          "Jamais connecté",
+        ]
+        return (order.indexOf(a) ?? 99) - (order.indexOf(b) ?? 99)
+      },
+    },
+  ]
+
+  /* ---------------- Actions ---------------- */
   function renderRowActions(client: Client) {
     return (
       <DropdownMenuItem onClick={() => {
@@ -118,6 +181,8 @@ export default function ClientsPage() {
         
         getRowId={(r) => r.id}
         searchable={{ placeholder: "Rechercher par nom ou téléphone...", fields: ["name", "phone"] }}
+        filters={filters}
+        groupBy={groupBy}
         renderRowActions={renderRowActions}
         renderRowDetailTitle={(c) => c.name}
         renderRowDetail={(c) => (

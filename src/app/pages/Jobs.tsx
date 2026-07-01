@@ -1,11 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { IconPencil, IconTrash, IconBriefcase } from "@tabler/icons-react"
+import { IconPencil, IconBriefcase } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
-import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { ColumnDef } from "@tanstack/react-table"
 
@@ -117,18 +117,22 @@ export default function JobsPage() {
 
   function renderRowActions(j: Job) {
     return (
-      <>
-        <DropdownMenuItem onClick={() => { setEditing(j); setOpen(true) }}><IconPencil className="w-4 h-4 mr-2" /> Modifier</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-rose-600" onClick={async () => {
-          const prev = rows; setRows((r) => r.filter(x => x.id !== j.id));
-          try { await jobApi.remove(j.id); toast.success("Offre supprimée.") } 
-          catch (e: any) { setRows(prev); showValidationErrors(e) }
-        }}>
-          <IconTrash className="w-4 h-4 mr-2" /> Supprimer
-        </DropdownMenuItem>
-      </>
+      <DropdownMenuItem onClick={() => { setEditing(j); setOpen(true) }}>
+        <IconPencil className="w-4 h-4 mr-2" /> Modifier
+      </DropdownMenuItem>
     )
+  }
+
+  async function handleDeleteRow(j: Job) {
+    const prev = rows
+    setRows((r) => r.filter((x) => x.id !== j.id))
+    try {
+      await jobApi.remove(j.id)
+      toast.success("Offre supprimée.")
+    } catch (e: any) {
+      setRows(prev)
+      showValidationErrors(e)
+    }
   }
 
   return (
@@ -158,6 +162,8 @@ export default function JobsPage() {
             onAdd={() => { setEditing(null); setOpen(true) }}
             addLabel="Créer une offre"
             renderRowActions={renderRowActions}
+            onDeleteRow={handleDeleteRow}
+            getDeleteRowLabel={(j) => j.title}
             groupBy={[ { id: "department", label: "Département", accessor: (j) => getLabel(allDepts, j.department) } ]}
             renderRowDetailTitle={(j) => (
               <div className="flex flex-col gap-1">

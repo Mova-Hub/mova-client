@@ -9,7 +9,8 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { DataTable, type FilterConfig } from "@/components/data-table"
+import { DataTable } from "@/components/data-table"
+import type { FilterConfig, GroupByConfig } from "@/components/data-table"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import orderApi, { type Order, type OrderStatus } from "@/api/order"
@@ -80,6 +81,41 @@ export default function OrdersPage() {
     setSelectedOrder(order)
     setDialogOpen(true)
   }
+
+  /* ---------------- Filters & GroupBy ---------------- */
+  const filters: FilterConfig<Order>[] = [
+    {
+      id: "eventType",
+      label: "Type d'événement",
+      accessor: (o) => o.eventType ?? "",
+    },
+    {
+      id: "origin",
+      label: "Ville de départ",
+      accessor: (o) => o.origin ?? "",
+    },
+  ]
+
+  const groupBy: GroupByConfig<Order>[] = [
+    {
+      id: "status",
+      label: "Statut",
+      accessor: (o) => STATUS_CONFIG[o.status]?.label ?? o.status,
+      sortGroups: (a, b) => {
+        const order = Object.values(STATUS_CONFIG).map((c) => c.label)
+        return order.indexOf(a) - order.indexOf(b)
+      },
+    },
+    {
+      id: "eventType",
+      label: "Type d'événement",
+      accessor: (o) =>
+        (o.eventType ?? "")
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase()),
+      sortGroups: (a, b) => a.localeCompare(b, "fr"),
+    },
+  ]
 
   /* ---------------- Columns ---------------- */
   const columns = React.useMemo<ColumnDef<Order>[]>(() => [
@@ -192,6 +228,9 @@ export default function OrdersPage() {
         pagination={pagination}
         onPaginationChange={setPagination}
         getRowId={(r) => r.id}
+        searchable={{ placeholder: "Rechercher client, trajet, type…", fields: ["contactName", "contactPhone", "origin", "destination", "eventType"] }}
+        filters={filters}
+        groupBy={groupBy}
         onRowClick={openOrder}
       />
 

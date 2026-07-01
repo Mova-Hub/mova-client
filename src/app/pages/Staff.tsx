@@ -2,15 +2,12 @@
 "use client"
 
 import * as React from "react"
-import { IconPencil, IconTrash } from "@tabler/icons-react"
+import { IconPencil } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
@@ -223,29 +220,22 @@ export default function StaffPage() {
 
   function renderRowActions(s: Staff) {
     return (
-      <>
-        <DropdownMenuItem onClick={() => { setEditing(s); setOpen(true) }}>
-          <IconPencil className="mr-2 h-4 w-4" /> Modifier
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="text-rose-600"
-          onClick={async () => {
-            const prev = rows
-            setRows((r) => r.filter(x => x.id !== s.id))
-            try {
-              await staffApi.remove(s.id)
-              toast("Membre supprimé.")
-            } catch (e: any) {
-              setRows(prev)
-              showValidationErrors(e)
-            }
-          }}
-        >
-          <IconTrash className="mr-2 h-4 w-4" /> Supprimer
-        </DropdownMenuItem>
-      </>
+      <DropdownMenuItem onClick={() => { setEditing(s); setOpen(true) }}>
+        <IconPencil className="mr-2 h-4 w-4" /> Modifier
+      </DropdownMenuItem>
     )
+  }
+
+  async function handleDeleteRow(s: Staff) {
+    const prev = rows
+    setRows((r) => r.filter((x) => x.id !== s.id))
+    try {
+      await staffApi.remove(s.id)
+      toast("Membre supprimé.")
+    } catch (e: any) {
+      setRows(prev)
+      showValidationErrors(e)
+    }
   }
   
   const groupBy: GroupByConfig<Staff>[] = [
@@ -281,6 +271,8 @@ export default function StaffPage() {
         onImport={() => setOpenImport(true)}
         importLabel="Importer"
         renderRowActions={renderRowActions}
+        onDeleteRow={handleDeleteRow}
+        getDeleteRowLabel={(s) => s.name}
         groupBy={groupBy}
         pageSizeOptions={[10, 20, 50]}
         renderRowDetailTitle={(s) => s.name}

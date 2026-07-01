@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import type { ColumnDef, SortingState, Column } from "@tanstack/react-table"
+import type { ColumnDef, SortingState } from "@tanstack/react-table"
 import {
   flexRender,
   getCoreRowModel,
@@ -44,6 +44,8 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
@@ -51,13 +53,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerFooter,
-} from "@/components/ui/drawer"
+import { DetailPanel } from "@/components/ui/detail-panel"
+import type { DetailPanelWidth } from "@/components/ui/detail-panel"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -87,7 +84,7 @@ export type FilterConfig<T> = {
   label: string
   options?: Array<{ label: string; value: string }>
   accessor: (row: T) => string
-  /** @deprecated kept for API compatibility, unused in current filter system */
+  /** @deprecated kept for API compatibility */
   defaultValue?: string
 }
 
@@ -116,12 +113,12 @@ type FilterCondition = {
 }
 
 const OPERATORS: { value: FilterOperator; label: string; needsValue: boolean }[] = [
-  { value: "eq",           label: "est",                needsValue: true  },
-  { value: "neq",          label: "n'est pas",          needsValue: true  },
-  { value: "contains",     label: "contient",           needsValue: true  },
-  { value: "not_contains", label: "ne contient pas",    needsValue: true  },
-  { value: "empty",        label: "est vide",           needsValue: false },
-  { value: "not_empty",    label: "n'est pas vide",     needsValue: false },
+  { value: "eq",           label: "est",             needsValue: true  },
+  { value: "neq",          label: "n'est pas",       needsValue: true  },
+  { value: "contains",     label: "contient",        needsValue: true  },
+  { value: "not_contains", label: "ne contient pas", needsValue: true  },
+  { value: "empty",        label: "est vide",        needsValue: false },
+  { value: "not_empty",    label: "n'est pas vide",  needsValue: false },
 ]
 
 export type DataTableProps<T extends object> = {
@@ -137,35 +134,21 @@ export type DataTableProps<T extends object> = {
   importLabel?: string
   pageSizeOptions?: number[]
   renderRowActions?: (row: T) => React.ReactNode
+  /** Adds a built-in "Supprimer" item with confirmation dialog to the actions menu */
+  onDeleteRow?: (row: T) => Promise<void> | void
+  /** Label shown in the single-row delete confirmation: Supprimer « [label] » ? */
+  getDeleteRowLabel?: (row: T) => string
   onDeleteSelected?: (rows: T[]) => void
   loading?: boolean
   rowCount?: number
   pagination?: { pageIndex: number; pageSize: number }
   onPaginationChange?: (pagination: { pageIndex: number; pageSize: number }) => void
   onRowClick?: (row: T) => void
-  /** Opens a built-in Drawer when a row is clicked */
+  /** Right-side detail panel triggered by row click */
   renderRowDetail?: (row: T) => React.ReactNode
   renderRowDetailTitle?: (row: T) => React.ReactNode
-}
-
-/* -------------------------------------------------------------------------- */
-/*                             Column value helpers                           */
-/* -------------------------------------------------------------------------- */
-
-function columnLabel<T>(col: Column<T, unknown>) {
-  const def: any = col.columnDef
-  if (typeof def.header === "string") return def.header
-  if (def?.meta?.label) return String(def.meta.label)
-  return String(col.id)
-}
-
-function columnValue<T>(col: Column<T, unknown>, row: T) {
-  const def: any = col.columnDef
-  if (typeof def.accessorFn === "function") {
-    try { return def.accessorFn(row, 0) } catch { /* ignore */ }
-  }
-  if (def.accessorKey) return (row as any)[String(def.accessorKey)]
-  return (row as any)[String(col.id)]
+  renderRowDetailDescription?: (row: T) => React.ReactNode
+  rowDetailPanelWidth?: DetailPanelWidth
 }
 
 /* -------------------------------------------------------------------------- */
@@ -185,11 +168,15 @@ export function DataTable<T extends object>({
   importLabel = "Importer",
   pageSizeOptions = [10, 20, 30, 40, 50],
   renderRowActions,
+  onDeleteRow,
+  getDeleteRowLabel,
   onDeleteSelected,
   loading,
   onRowClick,
   renderRowDetail,
   renderRowDetailTitle,
+  renderRowDetailDescription,
+  rowDetailPanelWidth = "xl",
 }: DataTableProps<T>) {
   const ALL_TOKEN = "__ALL__"
 
@@ -197,7 +184,8 @@ export function DataTable<T extends object>({
   React.useEffect(() => setData(externalData), [externalData])
 
   /* ----------------------------- Table state ------------------------------ */
-  const [openDelete, setOpenDelete] = React.useState(false)
+  const [openDeleteSelected, setOpenDeleteSelected] = React.useState(false)
+  const [rowToDelete, setRowToDelete] = React.useState<T | null>(null)
   const [rowSelection, setRowSelection] = React.useState({})
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 })
@@ -207,25 +195,13 @@ export function DataTable<T extends object>({
   const isRowClickable = !!(renderRowDetail || onRowClick)
 
   /* ------------------------------- Search --------------------------------- */
-  const [searchOpen, setSearchOpen] = React.useState(false)
   const [searchInput, setSearchInput] = React.useState("")
   const [search, setSearch] = React.useState("")
-  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
 
   React.useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 180)
     return () => clearTimeout(t)
   }, [searchInput])
-
-  function focusSearchSafely() {
-    const el = searchInputRef.current
-    if (!el) return
-    requestAnimationFrame(() => {
-      el.focus({ preventScroll: true })
-      try { el.setSelectionRange(el.value.length, el.value.length) } catch { /* ignore */ }
-    })
-  }
-  React.useEffect(() => { if (searchOpen) focusSearchSafely() }, [searchOpen])
 
   /* ------------------------- Airtable-style filters ----------------------- */
   const [conditions, setConditions] = React.useState<FilterCondition[]>([])
@@ -249,41 +225,42 @@ export function DataTable<T extends object>({
 
   function clearAllFilters() { setConditions([]) }
 
-  function resetSearchAndFilters() {
+  function resetAll() {
     setSearchInput("")
     setSearch("")
     clearAllFilters()
-    focusSearchSafely()
   }
 
   /* ------------------------- Filtered rows -------------------------------- */
   const filteredRows = React.useMemo(() => {
     const q = search.trim().toLowerCase()
     return data.filter((row) => {
-      const passSearch = !searchable || !q
-        ? true
-        : searchable.fields.some((k) => {
-            const val = getNestedValue(row, String(k))
-            return String(val ?? "").toLowerCase().includes(q)
-          })
+      const passSearch =
+        !searchable || !q
+          ? true
+          : searchable.fields.some((k) => {
+              const val = getNestedValue(row, String(k))
+              return String(val ?? "").toLowerCase().includes(q)
+            })
 
-      const passFilters = conditions.length === 0
-        ? true
-        : conditions.every((cond) => {
-            const config = filters?.find((f) => f.id === cond.field)
-            if (!config) return true
-            const rowValue = String(config.accessor(row) ?? "").toLowerCase()
-            const condValue = cond.value.toLowerCase()
-            switch (cond.operator) {
-              case "eq":           return rowValue === condValue
-              case "neq":          return rowValue !== condValue
-              case "contains":     return rowValue.includes(condValue)
-              case "not_contains": return !rowValue.includes(condValue)
-              case "empty":        return !rowValue
-              case "not_empty":    return !!rowValue
-              default:             return true
-            }
-          })
+      const passFilters =
+        conditions.length === 0
+          ? true
+          : conditions.every((cond) => {
+              const config = filters?.find((f) => f.id === cond.field)
+              if (!config) return true
+              const rowValue = String(config.accessor(row) ?? "").toLowerCase()
+              const condValue = cond.value.toLowerCase()
+              switch (cond.operator) {
+                case "eq":           return rowValue === condValue
+                case "neq":          return rowValue !== condValue
+                case "contains":     return rowValue.includes(condValue)
+                case "not_contains": return !rowValue.includes(condValue)
+                case "empty":        return !rowValue
+                case "not_empty":    return !!rowValue
+                default:             return true
+              }
+            })
 
       return passSearch && passFilters
     })
@@ -310,11 +287,15 @@ export function DataTable<T extends object>({
       if (!map[key]) map[key] = []
       map[key].push(r)
     }
-    const keys = Object.keys(map).sort(currentGroup.sortGroups ?? ((a, b) => a.localeCompare(b)))
+    const keys = Object.keys(map).sort(
+      currentGroup.sortGroups ?? ((a, b) => a.localeCompare(b))
+    )
     return keys.reduce((acc, k) => { acc[k] = map[k]; return acc }, {} as Record<string, T[]>)
   }, [filteredRows, currentGroup])
 
   /* ------------------------------ Columns --------------------------------- */
+  const hasActionsColumn = !!(renderRowActions || onDeleteRow)
+
   const composedColumns = React.useMemo<ColumnDef<T>[]>(() => {
     const cols: ColumnDef<T>[] = []
 
@@ -323,7 +304,10 @@ export function DataTable<T extends object>({
       header: ({ table }) => (
         <div className="flex items-center justify-center">
           <Checkbox
-            checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && "indeterminate")}
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() && "indeterminate")
+            }
             onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
             aria-label="Sélectionner tout"
           />
@@ -348,7 +332,7 @@ export function DataTable<T extends object>({
 
     cols.push(...columns)
 
-    if (renderRowActions) {
+    if (hasActionsColumn) {
       cols.push({
         id: "_actions",
         header: () => null,
@@ -365,8 +349,18 @@ export function DataTable<T extends object>({
                   <span className="sr-only">Ouvrir le menu</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                {renderRowActions(row.original)}
+              <DropdownMenuContent align="end" className="w-44">
+                {renderRowActions?.(row.original)}
+                {onDeleteRow && renderRowActions && <DropdownMenuSeparator />}
+                {onDeleteRow && (
+                  <DropdownMenuItem
+                    className="text-rose-600 focus:text-rose-600 focus:bg-rose-50"
+                    onClick={() => setRowToDelete(row.original)}
+                  >
+                    <IconTrash className="mr-2 size-4" />
+                    Supprimer
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -376,7 +370,7 @@ export function DataTable<T extends object>({
     }
 
     return cols
-  }, [columns, renderRowActions])
+  }, [columns, renderRowActions, onDeleteRow, hasActionsColumn])
 
   /* --------------------------------- Table -------------------------------- */
   const table = useReactTable({
@@ -398,8 +392,8 @@ export function DataTable<T extends object>({
     if (loading) {
       return (
         <div className="py-16">
-          <div className="mx-auto w-full max-w-md rounded-lg border bg-muted/30 p-6 text-center">
-            <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-full bg-background shadow ring-1 ring-border">
+          <div className="w-full max-w-md p-6 mx-auto text-center border rounded-lg bg-muted/30">
+            <div className="grid w-10 h-10 mx-auto mb-3 rounded-full shadow place-items-center bg-background ring-1 ring-border">
               <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
             </div>
             <div className="text-base font-medium">Chargement des données…</div>
@@ -412,12 +406,13 @@ export function DataTable<T extends object>({
     }
     return (
       <div className="py-16">
-        <div className="mx-auto w-full max-w-md rounded-lg border bg-muted/20 p-6 text-center">
-          <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-full bg-background shadow ring-1 ring-border">
-            {hasActiveFilters
-              ? <IconSearch className="size-5 text-muted-foreground" />
-              : <IconMoodConfuzed className="size-5 text-muted-foreground" />
-            }
+        <div className="w-full max-w-md p-6 mx-auto text-center border rounded-lg bg-muted/20">
+          <div className="grid w-10 h-10 mx-auto mb-3 rounded-full shadow place-items-center bg-background ring-1 ring-border">
+            {hasActiveFilters ? (
+              <IconSearch className="size-5 text-muted-foreground" />
+            ) : (
+              <IconMoodConfuzed className="size-5 text-muted-foreground" />
+            )}
           </div>
           <div className="text-base font-semibold">
             {hasActiveFilters ? "Aucun résultat trouvé" : "Aucun élément à afficher"}
@@ -428,8 +423,8 @@ export function DataTable<T extends object>({
               : "Lorsque des données seront disponibles, elles s'afficheront ici."}
           </p>
           {hasActiveFilters && (
-            <div className="mt-4 flex justify-center">
-              <Button size="sm" variant="secondary" onClick={resetSearchAndFilters}>
+            <div className="flex justify-center mt-4">
+              <Button size="sm" variant="secondary" onClick={resetAll}>
                 Réinitialiser la recherche et les filtres
               </Button>
             </div>
@@ -442,16 +437,14 @@ export function DataTable<T extends object>({
 
   /* -------------------------------- Render -------------------------------- */
   return (
-    <div className="-mx-4 lg:-mx-6 w-full flex flex-col justify-start">
-      <div className="pt-1 px-4 lg:px-6">
+    <div className="flex flex-col justify-start w-full -mx-4 lg:-mx-6">
+      <div className="px-4 pt-1 lg:px-6">
 
-        {/* ── Toolbar ──────────────────────────────────────────── */}
-        <div className="mb-3 flex flex-wrap items-center gap-2">
+        {/* ── Toolbar ──────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
 
-          {/* LEFT: Filter button (Airtable-style) + Group By */}
-          <div className="flex flex-wrap items-center gap-2">
-
-            {/* Airtable filter popover */}
+          {/* LEFT: Filter + Group By */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             {filters?.length ? (
               <Popover>
                 <PopoverTrigger asChild>
@@ -466,21 +459,18 @@ export function DataTable<T extends object>({
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-[520px] p-0" sideOffset={6}>
-                  {/* Panel header */}
-                  <div className="flex items-center justify-between border-b px-3 py-2">
+                  <div className="flex items-center justify-between px-3 py-2 border-b">
                     <span className="text-sm font-medium">Filtres</span>
                     {conditions.length > 0 && (
-                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={clearAllFilters}>
+                      <Button variant="ghost" size="sm" className="text-xs h-7" onClick={clearAllFilters}>
                         <IconRefresh className="mr-1 size-3" />
                         Effacer tout
                       </Button>
                     )}
                   </div>
-
-                  {/* Conditions list */}
-                  <div className="max-h-72 overflow-y-auto p-3 space-y-2">
+                  <div className="p-3 space-y-2 overflow-y-auto max-h-72">
                     {conditions.length === 0 ? (
-                      <p className="py-6 text-center text-sm text-muted-foreground">
+                      <p className="py-6 text-sm text-center text-muted-foreground">
                         Aucun filtre actif. Cliquez sur « Ajouter un filtre » pour commencer.
                       </p>
                     ) : (
@@ -488,16 +478,20 @@ export function DataTable<T extends object>({
                         const fieldConfig = filters.find((f) => f.id === cond.field)
                         const isEnumField = (fieldConfig?.options?.length ?? 0) > 0
                         const availableOps = isEnumField
-                          ? OPERATORS.filter((op) => ["eq", "neq", "empty", "not_empty"].includes(op.value))
+                          ? OPERATORS.filter((op) =>
+                              ["eq", "neq", "empty", "not_empty"].includes(op.value)
+                            )
                           : OPERATORS
-                        const needsValue = OPERATORS.find((op) => op.value === cond.operator)?.needsValue ?? true
+                        const needsValue =
+                          OPERATORS.find((op) => op.value === cond.operator)?.needsValue ?? true
 
                         return (
                           <div key={cond.id} className="flex items-center gap-2">
-                            {/* Field selector */}
                             <Select
                               value={cond.field}
-                              onValueChange={(v) => updateCondition(cond.id, { field: v, value: "", operator: "eq" })}
+                              onValueChange={(v) =>
+                                updateCondition(cond.id, { field: v, value: "", operator: "eq" })
+                              }
                             >
                               <SelectTrigger size="sm" className="w-[140px] shrink-0">
                                 <SelectValue />
@@ -508,11 +502,11 @@ export function DataTable<T extends object>({
                                 ))}
                               </SelectContent>
                             </Select>
-
-                            {/* Operator selector */}
                             <Select
                               value={cond.operator}
-                              onValueChange={(v) => updateCondition(cond.id, { operator: v as FilterOperator })}
+                              onValueChange={(v) =>
+                                updateCondition(cond.id, { operator: v as FilterOperator })
+                              }
                             >
                               <SelectTrigger size="sm" className="w-[160px] shrink-0">
                                 <SelectValue />
@@ -523,13 +517,13 @@ export function DataTable<T extends object>({
                                 ))}
                               </SelectContent>
                             </Select>
-
-                            {/* Value */}
-                            {needsValue && (
-                              isEnumField ? (
+                            {needsValue &&
+                              (isEnumField ? (
                                 <Select
                                   value={cond.value || ALL_TOKEN}
-                                  onValueChange={(v) => updateCondition(cond.id, { value: v === ALL_TOKEN ? "" : v })}
+                                  onValueChange={(v) =>
+                                    updateCondition(cond.id, { value: v === ALL_TOKEN ? "" : v })
+                                  }
                                 >
                                   <SelectTrigger size="sm" className="w-[140px] shrink-0">
                                     <SelectValue placeholder="Choisir…" />
@@ -546,11 +540,11 @@ export function DataTable<T extends object>({
                                   className="h-8 w-[140px] shrink-0 text-sm"
                                   placeholder="Valeur…"
                                   value={cond.value}
-                                  onChange={(e) => updateCondition(cond.id, { value: e.target.value })}
+                                  onChange={(e) =>
+                                    updateCondition(cond.id, { value: e.target.value })
+                                  }
                                 />
-                              )
-                            )}
-
+                              ))}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -564,10 +558,8 @@ export function DataTable<T extends object>({
                       })
                     )}
                   </div>
-
-                  {/* Panel footer */}
-                  <div className="border-t px-3 py-2">
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={addCondition}>
+                  <div className="px-3 py-2 border-t">
+                    <Button variant="ghost" size="sm" className="text-xs h-7" onClick={addCondition}>
                       <IconPlus className="mr-1 size-3.5" />
                       Ajouter un filtre
                     </Button>
@@ -576,7 +568,6 @@ export function DataTable<T extends object>({
               </Popover>
             ) : null}
 
-            {/* Group By */}
             {groupBy?.length ? (
               <Select
                 value={groupId || "none"}
@@ -596,53 +587,34 @@ export function DataTable<T extends object>({
             ) : null}
           </div>
 
-          {/* CENTER: Search */}
+          {/* CENTER: Always-visible search */}
           {searchable && (
-            <div className="mx-auto flex items-center">
-              <div
-                className={cn(
-                  "flex items-center rounded-md border bg-background transition-all",
-                  searchOpen ? "pr-2" : "border-transparent"
-                )}
-                onMouseDown={(e) => e.preventDefault()}
-              >
-                <Button
-                  type="button"
-                  variant={searchOpen ? "secondary" : "ghost"}
-                  size="icon"
-                  className="size-8"
-                  onClick={() => setSearchOpen((v) => !v)}
-                >
-                  <IconSearch className="size-4" />
-                </Button>
+            <div className="flex items-center flex-1 min-w-0 mx-1">
+              <div className="relative w-full max-w-sm">
+                <IconSearch className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                 <Input
-                  ref={searchInputRef}
-                  className={cn(
-                    "border-none focus-visible:ring-0 focus-visible:ring-offset-0 transition-all placeholder:text-sm",
-                    searchOpen ? "w-40 sm:w-64 lg:w-80 opacity-100" : "w-0 p-0 opacity-0"
-                  )}
+                  className="h-8 pl-8 pr-8 text-sm"
                   placeholder={searchable.placeholder ?? "Rechercher…"}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  onFocus={() => setSearchOpen(true)}
                 />
-                {searchOpen && searchInput && (
+                {searchInput && (
                   <button
-                    className="rounded p-1 hover:bg-muted"
-                    onClick={() => { setSearchInput(""); setSearch(""); focusSearchSafely() }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                    onClick={() => { setSearchInput(""); setSearch("") }}
                     aria-label="Effacer la recherche"
                   >
-                    <IconX className="size-4" />
+                    <IconX className="size-3.5" />
                   </button>
                 )}
               </div>
             </div>
           )}
 
-          {/* RIGHT: Delete + Import + Add */}
-          <div className="ml-auto flex items-center gap-2">
+          {/* RIGHT: Actions */}
+          <div className={cn("flex items-center gap-2 shrink-0", !searchable && "ml-auto")}>
             {onDeleteSelected && table.getFilteredSelectedRowModel().rows.length > 0 && (
-              <Button variant="destructive" size="sm" onClick={() => setOpenDelete(true)}>
+              <Button variant="destructive" size="sm" onClick={() => setOpenDeleteSelected(true)}>
                 <IconTrash />
                 <span className="hidden lg:inline">
                   Supprimer ({table.getFilteredSelectedRowModel().rows.length})
@@ -663,15 +635,15 @@ export function DataTable<T extends object>({
             )}
           </div>
         </div>
-        {/* ── End Toolbar ──────────────────────────────────────── */}
+        {/* ── End Toolbar ──────────────────────────────────────────── */}
 
       </div>
 
-      {/* ── Table ──────────────────────────────────────────────── */}
+      {/* ── Table ──────────────────────────────────────────────────── */}
       <div className="relative px-2 lg:px-3">
         <div className="overflow-x-auto border-x">
           <Table className="w-full min-w-full">
-            <TableHeader className="bg-muted sticky top-0 z-10">
+            <TableHeader className="sticky top-0 z-10 bg-muted">
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
@@ -703,10 +675,14 @@ export function DataTable<T extends object>({
                     key={row.id}
                     data-state={row.getIsSelected() && "selected"}
                     className={cn(isRowClickable && "cursor-pointer")}
-                    onClick={isRowClickable ? () => {
-                      onRowClick?.(row.original)
-                      if (renderRowDetail) setDetailRow(row.original)
-                    } : undefined}
+                    onClick={
+                      isRowClickable
+                        ? () => {
+                            onRowClick?.(row.original)
+                            if (renderRowDetail) setDetailRow(row.original)
+                          }
+                        : undefined
+                    }
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id} className="whitespace-nowrap">
@@ -721,12 +697,16 @@ export function DataTable<T extends object>({
                     <React.Fragment key={label}>
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
                         <TableCell colSpan={composedColumns.length} className="text-sm font-semibold">
-                          {label} <span className="text-muted-foreground">({groupRows.length})</span>
+                          {label}{" "}
+                          <span className="text-muted-foreground">({groupRows.length})</span>
                         </TableCell>
                       </TableRow>
                       {groupRows.map((gr, idx) => {
-                        const id = getRowId?.(gr, idx) ?? String(filteredRows.indexOf(gr))
-                        const tableRow = rows.find((r) => r.id === id) ?? rows.find((r) => r.original === gr)
+                        const id =
+                          getRowId?.(gr, idx) ?? String(filteredRows.indexOf(gr))
+                        const tableRow =
+                          rows.find((r) => r.id === id) ??
+                          rows.find((r) => r.original === gr)
                         if (!tableRow) return null
                         return renderTableRow(tableRow)
                       })}
@@ -740,16 +720,16 @@ export function DataTable<T extends object>({
           </Table>
         </div>
 
-        {/* ── Pagination ──────────────────────────────────────── */}
-        <div className="flex items-center justify-between mt-3 px-2 lg:px-3">
-          <div className="text-muted-foreground hidden flex-1 text-sm lg:flex">
+        {/* ── Pagination ──────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-2 mt-3 lg:px-3">
+          <div className="flex-1 hidden text-sm text-muted-foreground lg:flex">
             {table.getFilteredSelectedRowModel().rows.length} sur{" "}
             {table.getFilteredRowModel().rows.length} ligne(s) sélectionnée(s)
           </div>
-          <div className="flex w-full items-center gap-8 lg:w-fit">
-            <div className="hidden items-center gap-2 lg:flex">
+          <div className="flex items-center w-full gap-8 lg:w-fit">
+            <div className="items-center hidden gap-2 lg:flex">
               <Label htmlFor="rows-per-page" className="text-sm font-medium">
-                Résultat par page :
+                Résultats par page :
               </Label>
               <Select
                 value={`${table.getState().pagination.pageSize}`}
@@ -765,27 +745,46 @@ export function DataTable<T extends object>({
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex w-fit items-center justify-center text-sm font-medium">
+            <div className="flex items-center justify-center text-sm font-medium w-fit">
               Page {table.getState().pagination.pageIndex + 1} sur {table.getPageCount()}
             </div>
-            <div className="ml-auto flex items-center gap-2 lg:ml-0">
-              <Button variant="outline" className="hidden h-8 w-8 p-0 lg:flex"
-                onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}>
+            <div className="flex items-center gap-2 ml-auto lg:ml-0">
+              <Button
+                variant="outline"
+                className="hidden w-8 h-8 p-0 lg:flex"
+                onClick={() => table.setPageIndex(0)}
+                disabled={!table.getCanPreviousPage()}
+              >
                 <span className="sr-only">Première page</span>
                 <IconChevronsLeft />
               </Button>
-              <Button variant="outline" className="size-8" size="icon"
-                onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>
+              <Button
+                variant="outline"
+                className="size-8"
+                size="icon"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+              >
                 <span className="sr-only">Page précédente</span>
                 <IconChevronLeft />
               </Button>
-              <Button variant="outline" className="size-8" size="icon"
-                onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>
+              <Button
+                variant="outline"
+                className="size-8"
+                size="icon"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+              >
                 <span className="sr-only">Page suivante</span>
                 <IconChevronRight />
               </Button>
-              <Button variant="outline" className="hidden size-8 lg:flex" size="icon"
-                onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()}>
+              <Button
+                variant="outline"
+                className="hidden size-8 lg:flex"
+                size="icon"
+                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+                disabled={!table.getCanNextPage()}
+              >
                 <span className="sr-only">Dernière page</span>
                 <IconChevronsRight />
               </Button>
@@ -794,44 +793,80 @@ export function DataTable<T extends object>({
         </div>
       </div>
 
-      {/* ── Row detail Drawer ──────────────────────────────────── */}
+      {/* ── Row detail panel (right-side Sheet) ──────────────────────── */}
       {renderRowDetail && (
-        <Drawer open={!!detailRow} onOpenChange={(open) => { if (!open) setDetailRow(null) }}>
-          <DrawerContent>
-            <DrawerHeader className="gap-1">
-              <DrawerTitle>
-                {detailRow ? (renderRowDetailTitle?.(detailRow) ?? "Détails") : null}
-              </DrawerTitle>
-            </DrawerHeader>
-            {detailRow && (
-              <div className="overflow-y-auto px-4 py-2">
-                {renderRowDetail(detailRow)}
-              </div>
-            )}
-            <DrawerFooter>
-              <Button variant="outline" onClick={() => setDetailRow(null)}>Fermer</Button>
-            </DrawerFooter>
-          </DrawerContent>
-        </Drawer>
+        <DetailPanel
+          open={!!detailRow}
+          onOpenChange={(open) => { if (!open) setDetailRow(null) }}
+          width={rowDetailPanelWidth}
+          title={detailRow ? renderRowDetailTitle?.(detailRow) : undefined}
+          description={detailRow ? renderRowDetailDescription?.(detailRow) : undefined}
+          footer={
+            <Button variant="outline" className="w-full" onClick={() => setDetailRow(null)}>
+              Fermer
+            </Button>
+          }
+        >
+          {detailRow && renderRowDetail(detailRow)}
+        </DetailPanel>
       )}
 
-      {/* ── Delete confirmation ─────────────────────────────────── */}
-      <AlertDialog open={openDelete} onOpenChange={setOpenDelete}>
+      {/* ── Bulk delete confirmation ─────────────────────────────────── */}
+      <AlertDialog open={openDeleteSelected} onOpenChange={setOpenDeleteSelected}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer la sélection ?</AlertDialogTitle>
             <AlertDialogDescription>
-              Cette action est irréversible. Les éléments sélectionnés seront définitivement supprimés.
+              Cette action est irréversible.{" "}
+              {table.getFilteredSelectedRowModel().rows.length} élément(s) seront définitivement supprimés.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={() => {
-              const selectedRows = table.getFilteredSelectedRowModel().rows.map((r) => r.original as T)
-              setOpenDelete(false)
-              onDeleteSelected?.(selectedRows)
-              table.resetRowSelection()
-            }}>
+            <AlertDialogAction
+              className="text-white bg-destructive hover:bg-destructive/90"
+              onClick={() => {
+                const selected = table
+                  .getFilteredSelectedRowModel()
+                  .rows.map((r) => r.original as T)
+                setOpenDeleteSelected(false)
+                onDeleteSelected?.(selected)
+                table.resetRowSelection()
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Single-row delete confirmation ───────────────────────────── */}
+      <AlertDialog
+        open={!!rowToDelete}
+        onOpenChange={(open) => { if (!open) setRowToDelete(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {rowToDelete && getDeleteRowLabel
+                ? `Supprimer « ${getDeleteRowLabel(rowToDelete)} » ?`
+                : "Supprimer cet élément ?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible et ne peut pas être annulée.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRowToDelete(null)}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="text-white bg-destructive hover:bg-destructive/90"
+              onClick={async () => {
+                if (!rowToDelete) return
+                const target = rowToDelete
+                setRowToDelete(null)
+                await onDeleteRow?.(target)
+              }}
+            >
               Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>

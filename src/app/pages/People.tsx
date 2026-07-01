@@ -30,6 +30,16 @@ import type { FilterConfig, GroupByConfig } from "@/components/data-table"
 import ImportDialog from "@/components/common/ImportDialog"
 
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -238,6 +248,7 @@ export default function PeoplePage() {
   const [open, setOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<Person | null>(null)
   const [openImport, setOpenImport] = React.useState(false)
+  const [personToDelete, setPersonToDelete] = React.useState<Person | null>(null)
 
   const reload = React.useCallback(async () => {
     try {
@@ -386,21 +397,7 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
 
                   <DropdownMenuItem
                     className="text-rose-600 focus:text-rose-600 focus:bg-rose-50"
-                    onClick={async () => {
-                      const prev = rows
-                      setRows((r) => r.filter((x) => x.id !== p.id))
-                      try {
-                        if (isServerId(p.id)) {
-                          await peopleApi.remove(p.id)
-                          toast("Personne supprimée.")
-                        } else {
-                          toast("Élément local supprimé.")
-                        }
-                      } catch (e) {
-                        setRows(prev)
-                        showValidationErrors(e)
-                      }
-                    }}
+                    onClick={() => setPersonToDelete(p)}
                   >
                     <IconTrash className="mr-2 h-4 w-4" /> Supprimer
                   </DropdownMenuItem>
@@ -414,39 +411,21 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
     ]
   }, [rows, isServerId]) // Add dependencies needed for the actions
 
-  /* ------------------------- Row action handlers ------------------------- */
-
-  function renderRowActions(p: Person) {
-    return (
-      <>
-        <DropdownMenuItem onClick={() => { setEditing(p); setOpen(true) }}>
-          <IconPencil className="mr-2 h-4 w-4" /> Modifier
-        </DropdownMenuItem>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem
-          className="text-rose-600"
-          onClick={async () => {
-            const prev = rows
-            setRows((r) => r.filter((x) => x.id !== p.id))
-            try {
-              if (isServerId(p.id)) {
-                await peopleApi.remove(p.id)
-                toast("Personne supprimée.")
-              } else {
-                toast("Élément local supprimé.")
-              }
-            } catch (e) {
-              setRows(prev)
-              showValidationErrors(e)
-            }
-          }}
-        >
-          <IconTrash className="mr-2 h-4 w-4" /> Supprimer
-        </DropdownMenuItem>
-      </>
-    )
+  async function confirmDeletePerson() {
+    if (!personToDelete) return
+    const p = personToDelete
+    setPersonToDelete(null)
+    const prev = rows
+    setRows((r) => r.filter((x) => x.id !== p.id))
+    try {
+      if (isServerId(p.id)) {
+        await peopleApi.remove(p.id)
+      }
+      toast("Personne supprimée.")
+    } catch (e) {
+      setRows(prev)
+      showValidationErrors(e)
+    }
   }
 
   const groupBy: GroupByConfig<Person>[] = [
@@ -613,6 +592,34 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
           }
         }}
       />
+
+      {/* Delete confirmation for individual row (custom actions column) */}
+      <AlertDialog
+        open={!!personToDelete}
+        onOpenChange={(open) => { if (!open) setPersonToDelete(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {personToDelete
+                ? `Supprimer « ${personToDelete.name} » ?`
+                : "Supprimer cette personne ?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible et ne peut pas être annulée.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPersonToDelete(null)}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={confirmDeletePerson}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

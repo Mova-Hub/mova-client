@@ -2,14 +2,11 @@
 "use client"
 
 import * as React from "react"
-import { IconPencil, IconPower, IconTrash } from "@tabler/icons-react"
+import { IconPencil, IconPower } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 
 import { type ColumnDef } from "@tanstack/react-table"
 
@@ -347,10 +344,8 @@ export default function BusesPage() {
               >
                 <IconPencil className="mr-2 h-4 w-4" /> Modifier
               </DropdownMenuItem>
-
               <DropdownMenuItem
                 onClick={async () => {
-                  // optimistic toggle + server call
                   const prev = rows
                   const nextStatus: BusStatus = isActive ? "inactive" : "active"
                   setRows((r) => r.map((x) => (x.id === b.id ? { ...x, status: nextStatus } : x)))
@@ -369,29 +364,21 @@ export default function BusesPage() {
                 <IconPower className="mr-2 h-4 w-4" />
                 {isActive ? "Désactiver" : "Activer"}
               </DropdownMenuItem>
-
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem
-                className="text-rose-600"
-                onClick={async () => {
-                  // optimistic delete + rollback
-                  const prev = rows
-                  setRows((r) => r.filter((x) => x.id !== b.id))
-                  try {
-                    if (isServerUuid(b.id)) await busApi.remove(b.id)
-                    toast.error("Bus supprimé", { description: `Plaque : ${b.plate}` })
-                  } catch (e) {
-                    setRows(prev)
-                    showValidationErrors(e)
-                  }
-                }}
-              >
-                <IconTrash className="mr-2 h-4 w-4" /> Supprimer
-              </DropdownMenuItem>
             </>
           )
         }}
+        onDeleteRow={async (b) => {
+          const prev = rows
+          setRows((r) => r.filter((x) => x.id !== b.id))
+          try {
+            if (isServerUuid(b.id)) await busApi.remove(b.id)
+            toast.success("Bus supprimé", { description: `Plaque : ${b.plate}` })
+          } catch (e) {
+            setRows(prev)
+            showValidationErrors(e)
+          }
+        }}
+        getDeleteRowLabel={(b) => b.plate}
         groupBy={groupBy}
         pageSizeOptions={[10, 20, 50]}
         renderRowDetailTitle={(b) => b.plate}
