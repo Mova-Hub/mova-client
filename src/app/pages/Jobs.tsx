@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { ColumnDef } from "@tanstack/react-table"
 
 import { DataTable } from "@/components/data-table"
-import { makeDrawerTriggerColumn } from "@/components/data-table-helpers"
 import type { FilterConfig, GroupByConfig } from "@/components/data-table"
 
 import jobApi, { 
@@ -88,44 +87,24 @@ export default function JobsPage() {
   ]
 
   const columns = React.useMemo<ColumnDef<Job>[]>(() => [
-    makeDrawerTriggerColumn<Job>("title", {
-      triggerField: "title",
-      renderTrigger: (j) => (
-        <div className="flex items-center gap-3">
-          <IconBriefcase className="w-8 h-8 p-1.5 rounded-md bg-accent text-muted-foreground" />
-          <div className="min-w-0">
-            <div className="font-semibold truncate text-primary">{j.title}</div>
-            <div className="text-xs truncate text-muted-foreground">
-              {getLabel(allDepts, j.department)} • {getLabel(CONTRACT_TYPES, j.contractType)}
+    {
+      accessorKey: "title",
+      header: "Intitulé du poste",
+      cell: ({ row }) => {
+        const j = row.original
+        return (
+          <div className="flex items-center gap-3">
+            <IconBriefcase className="w-8 h-8 p-1.5 rounded-md bg-accent text-muted-foreground" />
+            <div className="min-w-0">
+              <div className="font-semibold truncate text-primary">{j.title}</div>
+              <div className="text-xs truncate text-muted-foreground">
+                {getLabel(allDepts, j.department)} • {getLabel(CONTRACT_TYPES, j.contractType)}
+              </div>
             </div>
           </div>
-        </div>
-      ),
-      renderTitle: (j) => (
-        <div className="flex flex-col gap-1">
-          <span className="text-xl font-bold">{j.title}</span>
-          <span className="text-sm font-normal text-muted-foreground">
-            {getLabel(allDepts, j.department)} — {getLabel(allLocs, j.location)}, {getLabel(allCountries, j.country)}
-          </span>
-        </div>
-      ),
-      renderBody: (j) => (
-        <div className="grid gap-6 text-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" className="px-2">{getLabel(WORK_MODES, j.workMode)}</Badge>
-            <Badge variant="secondary" className="px-2">{getLabel(CONTRACT_TYPES, j.contractType)}</Badge>
-            <Badge variant="outline" className={`px-2 ${statusColors[j.status]}`}>
-              {getLabel(JOB_STATUSES, j.status)}
-            </Badge>
-          </div>
-          <div><h4 className="pb-1 mb-1 font-semibold border-b">Le Poste</h4><p className="leading-relaxed text-muted-foreground">{j.shortDesc || "—"}</p></div>
-          <div><h4 className="pb-1 mb-2 font-semibold border-b">Responsabilités</h4><ul className="pl-5 space-y-1 list-disc text-muted-foreground">{j.responsibilities?.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
-          <div><h4 className="pb-1 mb-2 font-semibold border-b">Profil Recherché</h4><ul className="pl-5 space-y-1 list-disc text-muted-foreground">{j.requirements?.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
-          <div><h4 className="pb-1 mb-2 font-semibold border-b">Avantages</h4><ul className="pl-5 space-y-1 list-disc text-muted-foreground">{j.benefits?.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
-        </div>
-      ),
-      
-    }),
+        )
+      },
+    },
     { accessorKey: "location", header: "Lieu", cell: ({ row }) => <span className="text-muted-foreground">{getLabel(allLocs, row.original.location)}</span> },
     { accessorKey: "workMode", header: "Mode", cell: ({ row }) => <Badge variant="secondary">{getLabel(WORK_MODES, row.original.workMode)}</Badge> },
     {
@@ -180,7 +159,29 @@ export default function JobsPage() {
             addLabel="Créer une offre"
             renderRowActions={renderRowActions}
             groupBy={[ { id: "department", label: "Département", accessor: (j) => getLabel(allDepts, j.department) } ]}
-            initialView="list"
+            renderRowDetailTitle={(j) => (
+              <div className="flex flex-col gap-1">
+                <span className="text-xl font-bold">{j.title}</span>
+                <span className="text-sm font-normal text-muted-foreground">
+                  {getLabel(allDepts, j.department)} — {getLabel(allLocs, j.location)}, {getLabel(allCountries, j.country)}
+                </span>
+              </div>
+            )}
+            renderRowDetail={(j) => (
+              <div className="grid gap-6 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="px-2">{getLabel(WORK_MODES, j.workMode)}</Badge>
+                  <Badge variant="secondary" className="px-2">{getLabel(CONTRACT_TYPES, j.contractType)}</Badge>
+                  <Badge variant="outline" className={`px-2 ${statusColors[j.status]}`}>
+                    {getLabel(JOB_STATUSES, j.status)}
+                  </Badge>
+                </div>
+                <div><h4 className="pb-1 mb-1 font-semibold border-b">Le Poste</h4><p className="leading-relaxed text-muted-foreground">{j.shortDesc || "—"}</p></div>
+                <div><h4 className="pb-1 mb-2 font-semibold border-b">Responsabilités</h4><ul className="pl-5 space-y-1 list-disc text-muted-foreground">{j.responsibilities?.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
+                <div><h4 className="pb-1 mb-2 font-semibold border-b">Profil Recherché</h4><ul className="pl-5 space-y-1 list-disc text-muted-foreground">{j.requirements?.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
+                <div><h4 className="pb-1 mb-2 font-semibold border-b">Avantages</h4><ul className="pl-5 space-y-1 list-disc text-muted-foreground">{j.benefits?.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
+              </div>
+            )}
           />
         </TabsContent>
 

@@ -25,7 +25,6 @@ import {
 
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
-import { makeDrawerTriggerColumn } from "@/components/data-table-helpers"
 import type { FilterConfig, GroupByConfig } from "@/components/data-table"
 
 import ImportDialog from "@/components/common/ImportDialog"
@@ -301,23 +300,60 @@ export default function PeoplePage() {
 
 const columns = React.useMemo<ColumnDef<Person>[]>(() => {
     return [
-      // ... (Keep existing drawer/role/status/phone/email/license columns) ...
-      makeDrawerTriggerColumn<Person>("name", { /*...*/ }),
-      { accessorKey: "role", /*...*/ },
-      { accessorKey: "status", /*...*/ },
-      { accessorKey: "phone", /*...*/ },
-      { accessorKey: "email", /*...*/ },
-      { accessorKey: "licenseNo", /*...*/ },
+      {
+        accessorKey: "name",
+        header: "Nom",
+        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+      },
+      {
+        accessorKey: "role",
+        header: "Rôle",
+        cell: ({ row }) => (
+          <Badge variant="outline" className="px-1.5 capitalize">
+            {frRole(normalizeRole(row.original.role) ?? (row.original.role as PersonRole))}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: "status",
+        header: "Statut",
+        cell: ({ row }) => (
+          <Badge variant="outline" className="px-1.5">
+            {frStatus(row.original.status)}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: "phone",
+        header: "Téléphone",
+        cell: ({ row }) => row.original.phone ?? "—",
+      },
+      {
+        accessorKey: "email",
+        header: "Email",
+        cell: ({ row }) => (
+          <span className="block max-w-[200px] truncate">{row.original.email ?? "—"}</span>
+        ),
+        enableSorting: false,
+      },
+      {
+        accessorKey: "licenseNo",
+        header: "N° Permis",
+        cell: ({ row }) => row.original.licenseNo ?? "—",
+      },
 
-      // NEW: Custom Actions Column
+      // Custom Actions Column with phone shortcut + dropdown
       {
         id: "actions",
         header: () => null,
         cell: ({ row }) => {
           const p = row.original
-          
+
           return (
-            <div className="flex items-center justify-end gap-1">
+            <div
+              className="flex items-center justify-end gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* 1. Phone Button (Visible outside menu) */}
               {p.phone ? (
                 <Button
@@ -452,10 +488,28 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
         addLabel="Ajouter une personne"
         onImport={() => setOpenImport(true)}
         importLabel="Importer"
-        // renderRowActions={renderRowActions}
         groupBy={groupBy}
-        initialView="list"
         pageSizeOptions={[10, 20, 50]}
+        renderRowDetailTitle={(p) => p.name}
+        renderRowDetail={(p) => (
+          <div className="grid gap-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Rôle :</span>
+              <Badge variant="outline" className="px-1.5 capitalize">
+                {frRole(normalizeRole(p.role) ?? (p.role as PersonRole))}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Statut :</span>
+              <Badge variant="outline" className="px-1.5">{frStatus(p.status)}</Badge>
+            </div>
+            <div><span className="text-muted-foreground">Téléphone :</span> {p.phone ?? "—"}</div>
+            <div><span className="text-muted-foreground">Email :</span> {p.email ?? "—"}</div>
+            {p.licenseNo && (
+              <div><span className="text-muted-foreground">N° Permis :</span> {p.licenseNo}</div>
+            )}
+          </div>
+        )}
         onDeleteSelected={async (selected) => {
           if (selected.length === 0) return
           const prev = rows

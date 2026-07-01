@@ -14,7 +14,6 @@ import {
 import { type ColumnDef } from "@tanstack/react-table"
 
 import { DataTable } from "@/components/data-table"
-import { makeDrawerTriggerColumn } from "@/components/data-table-helpers"
 import type { FilterConfig, GroupByConfig } from "@/components/data-table"
 
 import AddEditBusDialog from "@/components/bus/AddEditBusDialog"
@@ -178,44 +177,11 @@ export default function BusesPage() {
 
   const columns = React.useMemo<ColumnDef<UIBus>[]>(() => {
     return [
-      makeDrawerTriggerColumn<UIBus>("plate", {
-        triggerField: "plate",
-        renderTitle: (b) => b.plate,
-        renderBody: (b) => (
-          <div className="grid gap-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Capacité :</span> {b.capacity}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Propriétaire :</span>{" "}
-              {getPersonName(b.operatorId, b.operatorName)}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Chauffeur :</span>{" "}
-              {getPersonName(b.assignedDriverId, b.driverName)}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Receveur :</span>{" "}
-              {getPersonName(b.assignedConductorId, b.conductorName)}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Type :</span> {prettyType(b.type)}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Modèle :</span> {b.model ?? "—"}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Année :</span> {b.year ?? "—"}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Statut :</span>
-              <Badge variant="outline" className="px-1.5 capitalize">
-                {frBusStatus(b.status)}
-              </Badge>
-            </div>
-          </div>
-        ),
-      }),
+      {
+        accessorKey: "plate",
+        header: "Immatriculation",
+        cell: ({ row }) => <span className="font-medium">{row.original.plate}</span>,
+      },
 
       {
         accessorKey: "capacity",
@@ -427,9 +393,42 @@ export default function BusesPage() {
           )
         }}
         groupBy={groupBy}
-        initialView="list"
         pageSizeOptions={[10, 20, 50]}
-        // drawer={{ triggerField: "plate" }}
+        renderRowDetailTitle={(b) => b.plate}
+        renderRowDetail={(b) => (
+          <div className="grid gap-2 text-sm">
+            <div>
+              <span className="text-muted-foreground">Capacité :</span> {b.capacity}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Propriétaire :</span>{" "}
+              {getPersonName(b.operatorId, b.operatorName)}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Chauffeur :</span>{" "}
+              {getPersonName(b.assignedDriverId, b.driverName)}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Receveur :</span>{" "}
+              {getPersonName(b.assignedConductorId, b.conductorName)}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Type :</span> {prettyType(b.type)}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Modèle :</span> {b.model ?? "—"}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Année :</span> {b.year ?? "—"}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Statut :</span>
+              <Badge variant="outline" className="px-1.5 capitalize">
+                {frBusStatus(b.status)}
+              </Badge>
+            </div>
+          </div>
+        )}
         onDeleteSelected={async (selected) => {
           if (selected.length === 0) return
           const prev = rows

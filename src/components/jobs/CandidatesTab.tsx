@@ -214,7 +214,6 @@ export function CandidatesTab({ jobs }: { jobs: Job[] }) {
       loading={loading}
       renderRowActions={renderRowActions}
       groupBy={groupBy}
-      initialView="list"
       onDeleteSelected={async (selected) => {
         if (selected.length === 0) return
         const prev = rows

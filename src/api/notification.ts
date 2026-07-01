@@ -36,7 +36,7 @@ export const notificationService = {
       const response = await apiService.get<NotificationResponse>("/notifications");
       return response.data;
     } catch (error) {
-      console.error("Failed to fetch notifications:", error);
+      console.error("Impossible de récupérer les notifications :", error);
       return null;
     }
   },
@@ -47,7 +47,7 @@ export const notificationService = {
       await apiService.patch(`/notifications/${id}/read`);
       return true;
     } catch (error) {
-      console.error("Failed to mark notification as read:", error);
+      console.error("Impossible de marquer la notification comme lue :", error);
       return false;
     }
   },
@@ -58,7 +58,7 @@ export const notificationService = {
       await apiService.post("/notifications/mark-all-read");
       return true;
     } catch (error) {
-      console.error("Failed to mark all as read:", error);
+      console.error("Impossible de marquer toutes les notifications comme lues :", error);
       return false;
     }
   },

@@ -14,7 +14,6 @@ import {
 
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
-import { makeDrawerTriggerColumn } from "@/components/data-table-helpers"
 import type { FilterConfig, GroupByConfig } from "@/components/data-table"
 
 import ImportDialog from "@/components/common/ImportDialog"
@@ -194,32 +193,16 @@ export default function StaffPage() {
   ]
 
   const columns = React.useMemo<ColumnDef<Staff>[]>(() => [
-    makeDrawerTriggerColumn<Staff>("name", {
-      triggerField: "name",
-      renderTrigger: (s) => (
-        <div className="flex items-center gap-3">
-          <div className="min-w-0">
-            <div className="truncate font-medium">{s.name}</div>
-            <div className="text-xs text-muted-foreground truncate">{s.email ?? s.phone ?? "—"}</div>
-          </div>
+    {
+      accessorKey: "name",
+      header: "Membre",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium">{row.original.name}</div>
+          <div className="text-xs text-muted-foreground truncate">{row.original.email ?? row.original.phone ?? "—"}</div>
         </div>
       ),
-      renderTitle: (s) => (
-        <div className="flex items-center gap-3">
-          <span>{s.name}</span>
-        </div>
-      ),
-      renderBody: (s) => (
-        <div className="grid gap-2 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Rôle :</span>
-            <Badge variant="outline" className="px-1.5 capitalize">{s.role}</Badge>
-          </div>
-          <div><span className="text-muted-foreground">Téléphone :</span> {s.phone ?? "—"}</div>
-          <div><span className="text-muted-foreground">Email :</span> {s.email ?? "—"}</div>
-        </div>
-      ),
-    }),
+    },
     {
       accessorKey: "role",
       header: "Rôle",
@@ -299,8 +282,18 @@ export default function StaffPage() {
         importLabel="Importer"
         renderRowActions={renderRowActions}
         groupBy={groupBy}
-        initialView="list"
         pageSizeOptions={[10, 20, 50]}
+        renderRowDetailTitle={(s) => s.name}
+        renderRowDetail={(s) => (
+          <div className="grid gap-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Rôle :</span>
+              <Badge variant="outline" className="px-1.5 capitalize">{s.role}</Badge>
+            </div>
+            <div><span className="text-muted-foreground">Téléphone :</span> {s.phone ?? "—"}</div>
+            <div><span className="text-muted-foreground">Email :</span> {s.email ?? "—"}</div>
+          </div>
+        )}
         onDeleteSelected={async (selected) => {
           if (selected.length === 0) return
           const prev = rows

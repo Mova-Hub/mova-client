@@ -13,7 +13,6 @@ import {
 
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
-import { makeDrawerTriggerColumn } from "@/components/data-table-helpers"
 
 import clientApi, { type Client } from "@/api/client"
 import { ApiError } from "@/api/apiService"
@@ -57,38 +56,16 @@ export default function ClientsPage() {
 
   /* ---------------- Columns ---------------- */
   const columns = React.useMemo<ColumnDef<Client>[]>(() => [
-    makeDrawerTriggerColumn<Client>("name", {
-      triggerField: "name",
-      // headerLabel: "Client",
-      renderTrigger: (c) => (
+    {
+      accessorKey: "name",
+      header: "Client",
+      cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="font-medium">{c.name}</span>
-          <span className="text-xs text-muted-foreground">{c.phone}</span>
+          <span className="font-medium">{row.original.name}</span>
+          <span className="text-xs text-muted-foreground">{row.original.phone}</span>
         </div>
       ),
-      renderTitle: (c) => c.name,
-      renderBody: (c) => (
-        <div className="space-y-4">
-          <div className="grid gap-2 text-sm">
-            <div className="flex items-center gap-2">
-              <IconPhone className="h-4 w-4 text-muted-foreground" />
-              <span>{c.phone}</span>
-            </div>
-            {c.email && (
-              <div className="flex items-center gap-2">
-                <IconMail className="h-4 w-4 text-muted-foreground" />
-                <span>{c.email}</span>
-              </div>
-            )}
-          </div>
-          <div className="rounded-md bg-muted p-3 text-sm">
-            <p className="font-medium">Statistiques</p>
-            <p>Commandes passées : {c.ordersCount}</p>
-            <p>Inscrit le : {c.createdAt ? new Date(c.createdAt).toLocaleDateString("fr-FR") : "—"}</p>
-          </div>
-        </div>
-      ),
-    }),
+    },
     {
       accessorKey: "email",
       header: "Email",
@@ -142,6 +119,28 @@ export default function ClientsPage() {
         getRowId={(r) => r.id}
         searchable={{ placeholder: "Rechercher par nom ou téléphone...", fields: ["name", "phone"] }}
         renderRowActions={renderRowActions}
+        renderRowDetailTitle={(c) => c.name}
+        renderRowDetail={(c) => (
+          <div className="space-y-4">
+            <div className="grid gap-2 text-sm">
+              <div className="flex items-center gap-2">
+                <IconPhone className="h-4 w-4 text-muted-foreground" />
+                <span>{c.phone}</span>
+              </div>
+              {c.email && (
+                <div className="flex items-center gap-2">
+                  <IconMail className="h-4 w-4 text-muted-foreground" />
+                  <span>{c.email}</span>
+                </div>
+              )}
+            </div>
+            <div className="rounded-md bg-muted p-3 text-sm">
+              <p className="font-medium">Statistiques</p>
+              <p>Commandes passées : {c.ordersCount}</p>
+              <p>Inscrit le : {c.createdAt ? new Date(c.createdAt).toLocaleDateString("fr-FR") : "—"}</p>
+            </div>
+          </div>
+        )}
       />
 
       {/* Client Details Dialog Component */}

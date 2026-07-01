@@ -21,7 +21,6 @@ import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdow
 
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/data-table"
-import { makeDrawerTriggerColumn } from "@/components/data-table-helpers"
 import type { FilterConfig, GroupByConfig } from "@/components/data-table"
 
 import ImportDialog from "@/components/common/ImportDialog"
@@ -270,55 +269,11 @@ export default function ReservationPage() {
   ]
 
   const columns = React.useMemo<ColumnDef<UIReservation>[]>(() => [
-    makeDrawerTriggerColumn<UIReservation>("code", {
-      triggerField: "code",
-      renderTitle: (r) => r.code,
-      renderBody: (r) => {
-        const busPlates = (r.busIds ?? []).map((id) => busPlateById.get(String(id)) ?? String(id))
-        const dist = r.distanceKm
-        return (
-          <div className="grid gap-2 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Statut :</span>
-              <Badge variant="outline" className="px-1.5 capitalize">{frStatus(r.status)}</Badge>
-            </div>
-            {!!r.event && (
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">Événement :</span>
-                <Badge variant="outline" className="px-1.5">{frEvent(r.event)}</Badge>
-              </div>
-            )}
-            <div className="grid gap-1">
-              <span className="text-muted-foreground">Passager</span>
-              <div>Nom : {r.passenger?.name ?? "—"}</div>
-              <div>Tél. : {r.passenger?.phone ?? "—"}</div>
-              <div>Email : {r.passenger?.email ?? "—"}</div>
-            </div>
-            <div className="grid gap-1">
-              <span className="text-muted-foreground">Trajet</span>
-              <div>{r.route?.from ?? "—"} → {r.route?.to ?? "—"}</div>
-              <div> Date : {friendlyDateTime(r.tripDate)} </div>
-              {!!dist && <div>Distance : {dist.toLocaleString("fr-FR")} km</div>}
-            </div>
-            <div className="grid gap-1">
-              <div>Sièges : {r.seats ?? "—"}</div>
-              <div>Total : {fmtMoney(r.priceTotal)}</div>
-              <div>Bus : {busPlates.length ? busPlates.join(", ") : "—"}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Paiement :</span>
-              <Badge variant="outline" className={
-                  r.paymentStatus === 'paid' ? "border-emerald-500 text-emerald-600 bg-emerald-50" : 
-                  r.paymentStatus === 'failed' ? "border-red-500 text-red-600 bg-red-50" : ""
-              }>
-                  {frPayment(r.paymentStatus)}
-              </Badge>
-            </div>
-            <div className="text-xs text-muted-foreground">Créée le {shortDatetime(r.createdAt)}</div>
-          </div>
-        )
-      },
-    }),
+    {
+      accessorKey: "code",
+      header: "Code",
+      cell: ({ row }) => <span className="font-medium font-mono">{row.original.code}</span>,
+    },
 
     { id: "tripDate", header: "Date", cell: ({ row }) => friendlyDateTime(row.original.tripDate) },
     { id: "passenger", header: "Passager", cell: ({ row }) => (
@@ -481,8 +436,53 @@ export default function ReservationPage() {
         importLabel="Importer"
         renderRowActions={renderRowActions}
         groupBy={groupBy}
-        initialView="list"
         pageSizeOptions={[10, 20, 50]}
+        renderRowDetailTitle={(r) => r.code}
+        renderRowDetail={(r) => {
+          const busPlates = (r.busIds ?? []).map((id) => busPlateById.get(String(id)) ?? String(id))
+          const dist = r.distanceKm
+          return (
+            <div className="grid gap-2 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Statut :</span>
+                <Badge variant="outline" className="px-1.5 capitalize">{frStatus(r.status)}</Badge>
+              </div>
+              {!!r.event && (
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Événement :</span>
+                  <Badge variant="outline" className="px-1.5">{frEvent(r.event)}</Badge>
+                </div>
+              )}
+              <div className="grid gap-1">
+                <span className="text-muted-foreground">Passager</span>
+                <div>Nom : {r.passenger?.name ?? "—"}</div>
+                <div>Tél. : {r.passenger?.phone ?? "—"}</div>
+                <div>Email : {r.passenger?.email ?? "—"}</div>
+              </div>
+              <div className="grid gap-1">
+                <span className="text-muted-foreground">Trajet</span>
+                <div>{r.route?.from ?? "—"} → {r.route?.to ?? "—"}</div>
+                <div>Date : {friendlyDateTime(r.tripDate)}</div>
+                {!!dist && <div>Distance : {dist.toLocaleString("fr-FR")} km</div>}
+              </div>
+              <div className="grid gap-1">
+                <div>Sièges : {r.seats ?? "—"}</div>
+                <div>Total : {fmtMoney(r.priceTotal)}</div>
+                <div>Bus : {busPlates.length ? busPlates.join(", ") : "—"}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Paiement :</span>
+                <Badge variant="outline" className={
+                  r.paymentStatus === "paid" ? "border-emerald-500 text-emerald-600 bg-emerald-50" :
+                  r.paymentStatus === "failed" ? "border-red-500 text-red-600 bg-red-50" : ""
+                }>
+                  {frPayment(r.paymentStatus)}
+                </Badge>
+              </div>
+              <div className="text-xs text-muted-foreground">Créée le {shortDatetime(r.createdAt)}</div>
+            </div>
+          )
+        }}
         onDeleteSelected={async (selected) => {
           if (selected.length === 0) return
           const prev = rows

@@ -221,11 +221,11 @@ export function GoogleMapPicker({
       </div>
       <div className="space-y-2">
         {waypoints.map((wp, idx) => (
-          <div key={idx} className="flex items-center gap-2 text-sm p-2 bg-muted/50 rounded-md border border-transparent hover:border-border transition-colors">
-             <div className="cursor-grab text-muted-foreground"><IconGripVertical className="h-4 w-4" /></div>
-             <Badge className="h-5 w-5 flex items-center justify-center rounded-full p-0 bg-emerald-600 hover:bg-emerald-700">{idx + 1}</Badge>
-             <span className="flex-1 truncate font-medium text-xs text-foreground/80">{wp.label}</span>
-             <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => { const next = [...waypoints]; next.splice(idx, 1); onChange(next) }}><IconX className="h-4 w-4" /></Button>
+          <div key={idx} className="flex items-center gap-2 p-2 text-sm transition-colors border border-transparent rounded-md bg-muted/50 hover:border-border">
+             <div className="cursor-grab text-muted-foreground"><IconGripVertical className="w-4 h-4" /></div>
+             <Badge className="flex items-center justify-center w-5 h-5 p-0 rounded-full bg-emerald-600 hover:bg-emerald-700">{idx + 1}</Badge>
+             <span className="flex-1 text-xs font-medium truncate text-foreground/80">{wp.label}</span>
+             <Button variant="ghost" size="icon" className="w-6 h-6 text-muted-foreground hover:text-destructive" onClick={() => { const next = [...waypoints]; next.splice(idx, 1); onChange(next) }}><IconX className="w-4 h-4" /></Button>
           </div>
         ))}
       </div>
@@ -245,7 +245,7 @@ export function MultiSelectBuses({ value, onChange, options, placeholder = "Sél
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button type="button" className={cn("flex min-h-10 w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm", "hover:bg-accent hover:text-accent-foreground")}>
-          <div className="flex min-h-6 flex-wrap items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1 min-h-6">
             {value.length === 0 ? <span className="text-muted-foreground">{placeholder}</span> : value.map((v) => <Badge key={v} variant="secondary" className="px-2">{options.find((o) => o.value === v)?.label ?? v}</Badge>)}
           </div>
           <span className="ml-3 text-xs text-muted-foreground">{open ? "Fermer" : "Ouvrir"}</span>
@@ -253,9 +253,9 @@ export function MultiSelectBuses({ value, onChange, options, placeholder = "Sél
       </PopoverTrigger>
       <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[480px] p-0" align="start">
         <div className="flex flex-col">
-          <div className="sticky top-0 z-10 bg-popover/80 backdrop-blur border-b p-2">
+          <div className="sticky top-0 z-10 p-2 border-b bg-popover/80 backdrop-blur">
             <Command><CommandInput placeholder="Chercher un bus..." /></Command>
-            <div className="mt-2 grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2 mt-2">
               {(["all", "hiace", "coaster"] as const).map(k => <button key={k} type="button" onClick={() => setFilter(k)} className={cn("rounded-md border px-2 py-1 text-xs capitalize", filter === k ? "bg-primary text-primary-foreground" : "hover:bg-accent")}>{k}</button>)}
             </div>
           </div>
@@ -296,11 +296,11 @@ export function TripDateTimePicker({ valueIso, onChange }: { valueIso?: string; 
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button variant="outline" className="w-full justify-start text-left font-normal"><CalendarIcon className="mr-2 h-4 w-4" /><span className={cn(!valueIso && "text-muted-foreground")}>{displayLabel}</span></Button></PopoverTrigger>
+      <PopoverTrigger asChild><Button variant="outline" className="justify-start w-full font-normal text-left"><CalendarIcon className="w-4 h-4 mr-2" /><span className={cn(!valueIso && "text-muted-foreground")}>{displayLabel}</span></Button></PopoverTrigger>
       <PopoverContent className="p-0" align="start"><div className="p-2">
         <Calendar mode="single" selected={date} onSelect={(d) => { if(d) { setDate(d); apply(d, time) } }} initialFocus />
-        <div className="mt-3 flex items-center gap-2"><Label className="text-xs">Heure</Label><Input type="time" value={time} onChange={(e) => { setTime(e.target.value); apply(undefined, e.target.value) }} /></div>
-        <div className="mt-3 flex justify-end"><Button size="sm" onClick={() => setOpen(false)}>Ok</Button></div>
+        <div className="flex items-center gap-2 mt-3"><Label className="text-xs">Heure</Label><Input type="time" value={time} onChange={(e) => { setTime(e.target.value); apply(undefined, e.target.value) }} /></div>
+        <div className="flex justify-end mt-3"><Button size="sm" onClick={() => setOpen(false)}>Ok</Button></div>
       </div></PopoverContent>
     </Popover>
   )
@@ -355,9 +355,9 @@ export function EventCombobox({ value, onChange }: { value: ReservationEvent; on
   const current = EVENT_OPTIONS.find(o => o.value === value)
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button variant="outline" role="combobox" className="w-full justify-between"><span className="truncate">{current ? current.label : "Choisir..."}</span><ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" /></Button></PopoverTrigger>
+      <PopoverTrigger asChild><Button variant="outline" role="combobox" className="justify-between w-full"><span className="truncate">{current ? current.label : "Choisir..."}</span><ChevronsUpDown className="w-4 h-4 ml-2 opacity-50" /></Button></PopoverTrigger>
       <PopoverContent className="p-0"><Command><CommandInput placeholder="Type d'événement..." /><CommandList><CommandEmpty>Rien trouvé.</CommandEmpty><CommandGroup>
-        {EVENT_OPTIONS.map((opt) => <CommandItem key={opt.value} value={opt.label} onSelect={() => { onChange(opt.value as ReservationEvent); setOpen(false) }}><span>{opt.label}</span>{opt.value === value && <Check className="ml-auto h-4 w-4" />}</CommandItem>)}
+        {EVENT_OPTIONS.map((opt) => <CommandItem key={opt.value} value={opt.label} onSelect={() => { onChange(opt.value as ReservationEvent); setOpen(false) }}><span>{opt.label}</span>{opt.value === value && <Check className="w-4 h-4 ml-auto" />}</CommandItem>)}
       </CommandGroup></CommandList></Command></PopoverContent>
     </Popover>
   )
@@ -553,15 +553,15 @@ export default function AddEditReservationDialog({ open, onOpenChange, editing, 
           <DialogDescription>Gérez l'itinéraire, le tarif et l'affectation des bus.</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 pb-2 space-y-8">
+        <div className="flex-1 px-6 pb-2 space-y-8 overflow-y-auto">
           
           {/* 1. Itinerary */}
-          <div className="space-y-4 pt-4">
+          <div className="pt-4 space-y-4">
              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Itinéraire</h3>
+                <h3 className="text-sm font-medium tracking-wider uppercase text-muted-foreground">Itinéraire</h3>
                 <div className="flex items-center gap-2">
                    <Switch id="map-mode" checked={useMap} onCheckedChange={setUseMap} />
-                   <Label htmlFor="map-mode" className="text-xs cursor-pointer flex items-center gap-1"><IconBrandGoogleMaps className="w-3 h-3" />Utiliser Google Maps</Label>
+                   <Label htmlFor="map-mode" className="flex items-center gap-1 text-xs cursor-pointer"><IconBrandGoogleMaps className="w-3 h-3" />Utiliser Google Maps</Label>
                 </div>
              </div>
              <div className="grid gap-4 sm:grid-cols-2">
@@ -571,16 +571,16 @@ export default function AddEditReservationDialog({ open, onOpenChange, editing, 
                 </div>
                 <div className="grid gap-1.5">
                    <Label>Distance (km)</Label>
-                   <Input type="number" value={distanceKmDisplay} onChange={e => setRouteKm(Number(e.target.value))} className="bg-background font-medium" />
+                   <Input type="number" value={distanceKmDisplay} onChange={e => setRouteKm(Number(e.target.value))} className="font-medium bg-background" />
                 </div>
              </div>
              {useMap ? (
                <div className="pt-2"><GoogleMapPicker waypoints={waypoints} onChange={setWaypoints} onRouteKmChange={setRouteKm} /></div>
              ) : (
-               <div className="grid gap-4 sm:grid-cols-2 pt-2 animate-in fade-in">
+               <div className="grid gap-4 pt-2 sm:grid-cols-2 animate-in fade-in">
                   <div className="grid gap-1.5"><Label>Départ</Label><Input placeholder="Ex: Aéroport" value={waypoints[0]?.label ?? ""} onChange={e => handleManualWaypointChange(0, e.target.value)} /></div>
                   <div className="grid gap-1.5"><Label>Arrivée</Label><Input placeholder="Ex: Centre Ville" value={waypoints[1]?.label ?? ""} onChange={e => handleManualWaypointChange(1, e.target.value)} /></div>
-                  <div className="sm:col-span-2 text-xs text-muted-foreground italic bg-muted/30 p-2 rounded"><IconAlertTriangle className="inline w-3 h-3 mr-1" />Mode manuel: saisissez la distance ci-dessus pour le tarif.</div>
+                  <div className="p-2 text-xs italic rounded sm:col-span-2 text-muted-foreground bg-muted/30"><IconAlertTriangle className="inline w-3 h-3 mr-1" />Mode manuel: saisissez la distance ci-dessus pour le tarif.</div>
                </div>
              )}
           </div>
@@ -588,7 +588,7 @@ export default function AddEditReservationDialog({ open, onOpenChange, editing, 
 
           {/* 2. Passenger */}
           <div className="space-y-3">
-             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Passager</h3>
+             <h3 className="text-sm font-medium tracking-wider uppercase text-muted-foreground">Passager</h3>
              <div className="grid gap-4 sm:grid-cols-2">
                <div className="grid gap-1.5"><Label>Nom</Label><Input value={form.passenger?.name ?? ""} onChange={e => setNested("passenger.name", e.target.value)} /></div>
                <div className="grid gap-1.5"><Label>Téléphone</Label><Input value={form.passenger?.phone ?? ""} onChange={e => setNested("passenger.phone", e.target.value)} /></div>
@@ -599,21 +599,21 @@ export default function AddEditReservationDialog({ open, onOpenChange, editing, 
 
           {/* 3. Pricing */}
           <div className="space-y-3">
-             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Tarification & Ressources</h3>
+             <h3 className="text-sm font-medium tracking-wider uppercase text-muted-foreground">Tarification & Ressources</h3>
              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5"><Label>Hiace (nombre)</Label><Input type="number" min={0} value={hiaceCount} onChange={e => setHiaceCount(Math.max(0, Math.floor(Number(e.target.value))))} /></div>
                 <div className="grid gap-1.5"><Label>Coaster (nombre)</Label><Input type="number" min={0} value={coasterCount} onChange={e => setCoasterCount(Math.max(0, Math.floor(Number(e.target.value))))} /></div>
              </div>
-             <div className="grid gap-4 sm:grid-cols-2 mt-2">
+             <div className="grid gap-4 mt-2 sm:grid-cols-2">
                <div className="grid gap-1.5"><Label>Évènement</Label><EventCombobox value={eventType} onChange={setEventType} /></div>
-               <div className="grid gap-1.5"><Label>Prix Total</Label><div className="relative"><Input type="number" value={form.priceTotal ?? 0} readOnly className="pr-16 font-bold text-emerald-700 bg-muted cursor-not-allowed" /><div className="absolute right-3 top-2.5 text-xs text-muted-foreground">{quoteCurrency}</div></div></div>
+               <div className="grid gap-1.5"><Label>Prix Total</Label><div className="relative"><Input type="number" value={form.priceTotal ?? 0} readOnly className="pr-16 font-bold cursor-not-allowed text-emerald-700 bg-muted" /><div className="absolute right-3 top-2.5 text-xs text-muted-foreground">{quoteCurrency}</div></div></div>
              </div>
           </div>
           <Separator />
 
           {/* 4. Bus */}
           <div className="space-y-3">
-             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Affectation des Bus</h3>
+             <h3 className="text-sm font-medium tracking-wider uppercase text-muted-foreground">Affectation des Bus</h3>
              <div className="grid gap-1.5">
                <Label>Sélection (Max: {hiaceCount} Hiace, {coasterCount} Coaster)</Label>
                <MultiSelectBuses value={busIds} onChange={setBusIdsLimited} options={busOptions} />
@@ -622,18 +622,18 @@ export default function AddEditReservationDialog({ open, onOpenChange, editing, 
           <Separator />
 
           {/* 5. Recap */}
-          <div className="space-y-4 pb-4">
-             <div className="flex items-center justify-between"><h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Récapitulatif</h3>{quoting && <Badge variant="secondary" className="animate-pulse">Calcul...</Badge>}</div>
+          <div className="pb-4 space-y-4">
+             <div className="flex items-center justify-between"><h3 className="text-sm font-medium tracking-wider uppercase text-muted-foreground">Récapitulatif</h3>{quoting && <Badge variant="secondary" className="animate-pulse">Calcul...</Badge>}</div>
              <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-lg border p-4 bg-muted/5"><div className="text-xs text-muted-foreground">Total Client</div><div className="mt-1 text-2xl font-semibold text-emerald-700">{fmtMoney(quote?.client_payable ?? form.priceTotal, quoteCurrency)}</div></div>
-                <div className="rounded-lg border p-4 bg-muted/5"><div className="text-xs text-muted-foreground">Part Bus</div><div className="mt-1 text-2xl font-semibold">{fmtMoney(quote?.breakdown.bus_rounded, quoteCurrency)}</div></div>
-                <div className="rounded-lg border p-4 bg-muted/5"><div className="text-xs text-muted-foreground">Commission</div><div className="mt-1 text-2xl font-semibold text-primary">{fmtMoney(quote?.breakdown.commission, quoteCurrency)}</div></div>
+                <div className="p-4 border rounded-lg bg-muted/5"><div className="text-xs text-muted-foreground">Total Client</div><div className="mt-1 text-2xl font-semibold text-emerald-700">{fmtMoney(quote?.client_payable ?? form.priceTotal, quoteCurrency)}</div></div>
+                <div className="p-4 border rounded-lg bg-muted/5"><div className="text-xs text-muted-foreground">Part Bus</div><div className="mt-1 text-2xl font-semibold">{fmtMoney(quote?.breakdown.bus_rounded, quoteCurrency)}</div></div>
+                <div className="p-4 border rounded-lg bg-muted/5"><div className="text-xs text-muted-foreground">Commission</div><div className="mt-1 text-2xl font-semibold text-primary">{fmtMoney(quote?.breakdown.commission, quoteCurrency)}</div></div>
              </div>
           </div>
 
         </div>
 
-        <DialogFooter className="border-t bg-background px-6 py-4">
+        <DialogFooter className="px-6 py-4 border-t bg-background">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
           <Button onClick={handleSubmit} disabled={quoting}>{editing ? "Enregistrer" : "Créer"}</Button>
         </DialogFooter>
