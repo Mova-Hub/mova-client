@@ -4,10 +4,15 @@ import * as React from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import {
-  ArrowLeft, Pencil, Power, UserCircle, Phone,
+  ArrowLeft, Pencil, Power, Phone,
   Upload, ShieldCheck, CarFront, Trash2,
   CheckCircle2, AlertTriangle, XCircle, FileText,
+  ChevronLeft, ChevronRight,
 } from "lucide-react"
+import {
+  useReactTable, getCoreRowModel, flexRender,
+  type ColumnDef,
+} from "@tanstack/react-table"
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -32,8 +37,14 @@ import {
 import {
   Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command"
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Separator } from "@/components/ui/separator"
 
 import busApi, { type UIBus, type BusStatus, type BusDocument, type BusStats } from "@/api/bus"
+import reservationApi, { type UIReservation } from "@/api/reservation"
 import peopleApi, { type Person } from "@/api/people"
 import AddEditBusDialog from "@/components/bus/AddEditBusDialog"
 
@@ -60,12 +71,12 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   visite_technique: "Visite technique", permis: "Permis", autre: "Autre",
 }
 
-const RESERVATION_STATUS_COLORS: Record<string, string> = {
-  pending:     "#f59e0b",
-  confirmed:   "#3b82f6",
-  completed:   "#10b981",
-  cancelled:   "#ef4444",
-  in_progress: "#6366f1",
+const RESERVATION_STATUS_CONFIG: Record<string, { color: string; label: string; badge: string }> = {
+  pending:     { color: "#f59e0b", label: "En attente",   badge: "bg-amber-50 text-amber-700 border-amber-200" },
+  confirmed:   { color: "#3b82f6", label: "Confirmée",    badge: "bg-blue-50 text-blue-700 border-blue-200" },
+  completed:   { color: "#10b981", label: "Terminée",     badge: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  cancelled:   { color: "#ef4444", label: "Annulée",      badge: "bg-red-50 text-red-700 border-red-200" },
+  in_progress: { color: "#6366f1", label: "En cours",     badge: "bg-violet-50 text-violet-700 border-violet-200" },
 }
 
 /* ─── Helpers ────────────────────────────────────────────────────────────────── */
@@ -125,23 +136,23 @@ function Spec({ label, value }: { label: string; value?: React.ReactNode }) {
   )
 }
 
-function AvatarCircle({ name, size = "md" }: { name?: string | null; size?: "sm" | "md" | "lg" }) {
-  const sz = size === "sm" ? "size-8 text-xs" : size === "lg" ? "size-14 text-xl" : "size-10 text-sm"
+/* ─── Crew avatar ────────────────────────────────────────────────────────────── */
+
+function CrewAvatar({ name, size = "md" }: { name?: string | null; size?: "sm" | "md" }) {
+  const cls = size === "sm" ? "size-8" : "size-10"
   return (
-    <div className={`${sz} rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary shrink-0`}>
-      {name ? initials(name) : <UserCircle className="size-5 text-muted-foreground" />}
-    </div>
+    <Avatar className={cls}>
+      <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+        {initials(name)}
+      </AvatarFallback>
+    </Avatar>
   )
 }
 
 /* ─── Inline crew assignment popover ─────────────────────────────────────────── */
 
 function AssignPopover({
-  busId,
-  currentId,
-  people,
-  role,
-  onAssigned,
+  busId, currentId, people, role, onAssigned,
 }: {
   busId: string
   currentId?: string | null
@@ -190,8 +201,12 @@ function AssignPopover({
               )}
               {candidates.map((p) => (
                 <CommandItem key={p.id} onSelect={() => assign(String(p.id))}>
-                  <AvatarCircle name={p.name} size="sm" />
-                  <div className="ml-2 min-w-0">
+                  <Avatar className="size-7 mr-2">
+                    <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
+                      {initials(p.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{p.name}</p>
                     {p.phone && <p className="text-xs text-muted-foreground">{p.phone}</p>}
                   </div>
@@ -208,9 +223,7 @@ function AssignPopover({
 /* ─── Document upload dialog ─────────────────────────────────────────────────── */
 
 function UploadDocumentDialog({
-  open,
-  onOpenChange,
-  onUpload,
+  open, onOpenChange, onUpload,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -245,7 +258,7 @@ function UploadDocumentDialog({
         <DialogHeader>
           <DialogTitle>Ajouter un document</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4">
+        <div className="grid gap-4 py-2">
           <div className="grid gap-1.5">
             <Label>Fichier *</Label>
             <Input type="file" onChange={(e) => {
@@ -260,15 +273,14 @@ function UploadDocumentDialog({
           </div>
           <div className="grid gap-1.5">
             <Label>Type</Label>
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={docType}
-              onChange={(e) => setDocType(e.target.value)}
-            >
-              {Object.entries(DOC_TYPE_LABELS).map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
-              ))}
-            </select>
+            <Select value={docType} onValueChange={setDocType}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(DOC_TYPE_LABELS).map(([v, l]) => (
+                  <SelectItem key={v} value={v}>{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid gap-1.5">
             <Label>Date d'expiration (optionnel)</Label>
@@ -286,12 +298,11 @@ function UploadDocumentDialog({
   )
 }
 
-/* ─── Tabs ───────────────────────────────────────────────────────────────────── */
+/* ─── Informations tab ───────────────────────────────────────────────────────── */
 
 function InformationsTab({ bus }: { bus: UIBus }) {
   return (
     <div className="grid gap-6 lg:grid-cols-3">
-      {/* Left: specs */}
       <div className="lg:col-span-2 space-y-6">
         <Card>
           <CardHeader className="pb-3 pt-5 px-6 border-b">
@@ -308,7 +319,7 @@ function InformationsTab({ bus }: { bus: UIBus }) {
               <Spec label="Capacité" value={bus.capacity ? `${bus.capacity} places` : undefined} />
               <Spec label="Année fab." value={bus.year ? String(bus.year) : undefined} />
               <Spec label="1re mise en circ." value={bus.firstRegistrationYear ? String(bus.firstRegistrationYear) : undefined} />
-              <Spec label="N° châssis" value={bus.chassisNumber} />
+              <Spec label="N° châssis" value={bus.chassisNumber ? <span className="font-mono">{bus.chassisNumber}</span> : undefined} />
               <Spec label="Kilométrage" value={bus.mileageKm ? `${bus.mileageKm.toLocaleString("fr-FR")} km` : undefined} />
               <Spec label="Dernière révision" value={formatDate(bus.lastServiceDate)} />
             </dl>
@@ -316,7 +327,6 @@ function InformationsTab({ bus }: { bus: UIBus }) {
         </Card>
       </div>
 
-      {/* Right: compliance */}
       <div className="space-y-4">
         <Card>
           <CardHeader className="pb-3 pt-5 px-6 border-b">
@@ -345,20 +355,16 @@ function InformationsTab({ bus }: { bus: UIBus }) {
   )
 }
 
-function EquipageTab({
-  bus,
-  people,
-  onBusUpdated,
-}: {
-  bus: UIBus
-  people: Person[]
-  onBusUpdated: (updated: UIBus) => void
+/* ─── Équipage tab ───────────────────────────────────────────────────────────── */
+
+function EquipageTab({ bus, people, onBusUpdated }: {
+  bus: UIBus; people: Person[]; onBusUpdated: (updated: UIBus) => void
 }) {
   const getPerson = (id?: string | null) => people.find((p) => String(p.id) === String(id)) ?? null
 
   const crew: { role: "driver" | "conductor"; label: string; person: Person | null; id?: string | null }[] = [
-    { role: "driver",    label: "Chauffeur",          person: getPerson(bus.assignedDriverId),   id: bus.assignedDriverId },
-    { role: "conductor", label: "Receveur / Convoyeur", person: getPerson(bus.assignedConductorId), id: bus.assignedConductorId },
+    { role: "driver",    label: "Chauffeur",             person: getPerson(bus.assignedDriverId),    id: bus.assignedDriverId },
+    { role: "conductor", label: "Receveur / Convoyeur",  person: getPerson(bus.assignedConductorId), id: bus.assignedConductorId },
   ]
 
   return (
@@ -386,8 +392,10 @@ function EquipageTab({
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2.5">
-                    <AvatarCircle name={person?.name} size="sm" />
-                    <span className="text-sm font-medium">{person?.name ?? <span className="text-muted-foreground italic">Non assigné</span>}</span>
+                    <CrewAvatar name={person?.name} size="sm" />
+                    <span className="text-sm font-medium">
+                      {person?.name ?? <span className="text-muted-foreground italic">Non assigné</span>}
+                    </span>
                   </div>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
@@ -405,13 +413,7 @@ function EquipageTab({
                   ) : "—"}
                 </TableCell>
                 <TableCell className="text-right">
-                  <AssignPopover
-                    busId={bus.id}
-                    currentId={id}
-                    people={people}
-                    role={role}
-                    onAssigned={onBusUpdated}
-                  />
+                  <AssignPopover busId={bus.id} currentId={id} people={people} role={role} onAssigned={onBusUpdated} />
                 </TableCell>
               </TableRow>
             ))}
@@ -421,6 +423,8 @@ function EquipageTab({
     </div>
   )
 }
+
+/* ─── Documents tab ──────────────────────────────────────────────────────────── */
 
 function DocumentsTab({ bus }: { bus: UIBus }) {
   const [docs, setDocs] = React.useState<BusDocument[]>([])
@@ -500,12 +504,7 @@ function DocumentsTab({ bus }: { bus: UIBus }) {
               docs.map((doc) => (
                 <TableRow key={doc.id}>
                   <TableCell>
-                    <a
-                      href={doc.fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium hover:underline text-sm"
-                    >
+                    <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer" className="font-medium hover:underline text-sm">
                       {doc.name}
                     </a>
                     {doc.sizeKb && <span className="ml-1.5 text-xs text-muted-foreground">{doc.sizeKb} Ko</span>}
@@ -517,8 +516,10 @@ function DocumentsTab({ bus }: { bus: UIBus }) {
                   </TableCell>
                   <TableCell>
                     {doc.expiresAt ? (
-                      <span className={getComplianceStatus(doc.expiresAt) === "expired" ? "text-destructive font-medium text-sm" :
-                        getComplianceStatus(doc.expiresAt) === "warning" ? "text-amber-600 font-medium text-sm" : "text-sm"}>
+                      <span className={
+                        getComplianceStatus(doc.expiresAt) === "expired" ? "text-destructive font-medium text-sm" :
+                        getComplianceStatus(doc.expiresAt) === "warning" ? "text-amber-600 font-medium text-sm" : "text-sm"
+                      }>
                         {formatDate(doc.expiresAt)}
                       </span>
                     ) : <span className="text-muted-foreground text-sm">—</span>}
@@ -526,11 +527,8 @@ function DocumentsTab({ bus }: { bus: UIBus }) {
                   <TableCell className="text-sm text-muted-foreground">{formatDate(doc.createdAt)}</TableCell>
                   <TableCell>
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-7 text-muted-foreground hover:text-destructive"
-                      disabled={deletingId === doc.id}
-                      onClick={() => handleDelete(doc.id)}
+                      variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-destructive"
+                      disabled={deletingId === doc.id} onClick={() => handleDelete(doc.id)}
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -547,140 +545,278 @@ function DocumentsTab({ bus }: { bus: UIBus }) {
   )
 }
 
+/* ─── Reservations tab ───────────────────────────────────────────────────────── */
+
+const RESERVATIONS_PER_PAGE = 10
+
 function ReservationsTab({ busId }: { busId: string }) {
+  /* ── Stats ── */
   const [stats, setStats] = React.useState<BusStats | null>(null)
-  const [loading, setLoading] = React.useState(true)
+  const [statsLoading, setStatsLoading] = React.useState(true)
+
+  /* ── Paginated table ── */
+  const [reservations, setReservations] = React.useState<UIReservation[]>([])
+  const [page, setPage] = React.useState(1)
+  const [lastPage, setLastPage] = React.useState(1)
+  const [total, setTotal] = React.useState(0)
+  const [tableLoading, setTableLoading] = React.useState(true)
 
   React.useEffect(() => {
     busApi.fetchStats(busId)
       .then((res) => setStats(res.data))
       .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => setStatsLoading(false))
   }, [busId])
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
-        </div>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Skeleton className="h-52 rounded-xl" />
-          <Skeleton className="h-52 rounded-xl" />
-        </div>
-      </div>
-    )
-  }
+  React.useEffect(() => {
+    setTableLoading(true)
+    reservationApi.list({ bus_id: busId, page, per_page: RESERVATIONS_PER_PAGE, order_by: "trip_date", order_dir: "desc" })
+      .then((res) => {
+        setReservations(res.data.rows)
+        setLastPage(res.data.meta.last_page)
+        setTotal(res.data.meta.total)
+      })
+      .catch(() => toast.error("Impossible de charger les réservations."))
+      .finally(() => setTableLoading(false))
+  }, [busId, page])
 
-  if (!stats) return (
-    <p className="text-sm text-muted-foreground py-8 text-center">Impossible de charger les statistiques.</p>
-  )
+  /* ── Table columns ── */
+  const columns = React.useMemo<ColumnDef<UIReservation>[]>(() => [
+    {
+      accessorKey: "code",
+      header: "Réf.",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.original.code ?? row.original.id.slice(0, 8)}
+        </span>
+      ),
+    },
+    {
+      id: "passenger",
+      header: "Passager",
+      cell: ({ row }) => <span className="text-sm font-medium">{row.original.passenger.name || "—"}</span>,
+    },
+    {
+      accessorKey: "tripDate",
+      header: "Date trajet",
+      cell: ({ row }) => <span className="text-sm text-muted-foreground">{formatDate(row.original.tripDate)}</span>,
+    },
+    {
+      id: "route",
+      header: "Itinéraire",
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground truncate max-w-[160px] block">
+          {row.original.route.from} → {row.original.route.to}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "status",
+      header: "Statut",
+      cell: ({ row }) => {
+        const s = row.original.status
+        const cfg = RESERVATION_STATUS_CONFIG[s] ?? { badge: "", label: s }
+        return (
+          <Badge variant="outline" className={`text-xs capitalize ${cfg.badge}`}>
+            {cfg.label ?? s}
+          </Badge>
+        )
+      },
+    },
+    {
+      accessorKey: "priceTotal",
+      header: "Montant",
+      cell: ({ row }) => (
+        <span className="text-sm font-medium text-right block">
+          {row.original.priceTotal.toLocaleString("fr-FR")} FCFA
+        </span>
+      ),
+    },
+  ], [])
 
-  const statusData = Object.entries(stats.by_status).map(([name, value]) => ({ name, value }))
-  const eventData  = Object.entries(stats.by_event).map(([name, value]) => ({ name, value }))
+  const table = useReactTable({
+    data: reservations,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    manualPagination: true,
+    pageCount: lastPage,
+  })
 
-  const statCards = [
-    { label: "Total trajets",       value: stats.total_reservations.toString() },
-    { label: "Distance cumulée",    value: `${stats.total_distance_km.toLocaleString("fr-FR")} km` },
-    { label: "Revenus estimés",     value: `${stats.total_revenue.toLocaleString("fr-FR")} FCFA` },
-    { label: "Confirmées",          value: String(stats.by_status["confirmed"] ?? 0) },
-  ]
+  /* ── Chart data ── */
+  const statusData = stats ? Object.entries(stats.by_status).map(([name, value]) => ({ name, value })) : []
+  const eventData  = stats ? Object.entries(stats.by_event).map(([name, value]) => ({ name, value })) : []
+
+  const statCards = stats ? [
+    { label: "Total trajets",    value: stats.total_reservations.toString() },
+    { label: "Distance cumulée", value: `${stats.total_distance_km.toLocaleString("fr-FR")} km` },
+    { label: "Revenus estimés",  value: `${stats.total_revenue.toLocaleString("fr-FR")} FCFA` },
+    { label: "Confirmées",       value: String(stats.by_status["confirmed"] ?? 0) },
+  ] : Array.from({ length: 4 }, (_, i) => ({ label: ["Total trajets", "Distance cumulée", "Revenus estimés", "Confirmées"][i], value: "—" }))
 
   return (
     <div className="space-y-6">
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {statCards.map((s) => (
-          <div key={s.label} className="flex flex-col gap-1.5 rounded-xl border bg-card p-4">
-            <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{s.label}</span>
-            <span className="text-lg font-bold">{s.value}</span>
-          </div>
+          <Card key={s.label}>
+            <CardContent className="p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{s.label}</p>
+              {statsLoading ? (
+                <Skeleton className="h-6 w-20 mt-2" />
+              ) : (
+                <p className="text-lg font-bold mt-1">{s.value}</p>
+              )}
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      {/* Charts */}
-      {(statusData.length > 0 || eventData.length > 0) && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          {statusData.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2 pt-5 px-6">
-                <CardTitle className="text-sm font-semibold">Répartition par statut</CardTitle>
-              </CardHeader>
-              <CardContent className="h-52 px-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={72} paddingAngle={2}>
-                      {statusData.map((entry) => (
-                        <Cell key={entry.name} fill={RESERVATION_STATUS_COLORS[entry.name] ?? "#94a3b8"} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(v: number) => [v, "Réservations"]} />
-                    <Legend iconType="circle" iconSize={8} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-
-          {eventData.length > 0 && (
-            <Card>
-              <CardHeader className="pb-2 pt-5 px-6">
-                <CardTitle className="text-sm font-semibold">Par type d'événement</CardTitle>
-              </CardHeader>
-              <CardContent className="h-52 px-2">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={eventData} margin={{ top: 4, right: 12, left: -16, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    <Bar dataKey="value" name="Réservations" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {/* Recent table */}
-      {stats.recent.length > 0 && (
+      {/* Charts — always visible */}
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader className="pb-3 pt-5 px-6 border-b">
-            <CardTitle className="text-sm font-semibold">Réservations récentes</CardTitle>
+          <CardHeader className="pb-2 pt-5 px-6">
+            <CardTitle className="text-sm font-semibold">Répartition par statut</CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader className="bg-muted/30">
-                <TableRow>
-                  <TableHead>Réf.</TableHead>
-                  <TableHead>Passager</TableHead>
-                  <TableHead>Date trajet</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className="text-right">Montant</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stats.recent.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-mono text-xs">{r.code ?? r.id.slice(0, 8)}</TableCell>
-                    <TableCell className="text-sm">{r.passenger_name}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {r.trip_date ? new Date(r.trip_date).toLocaleDateString("fr-FR") : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs capitalize">{r.status ?? "—"}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-sm font-medium">
-                      {r.price_total.toLocaleString("fr-FR")} FCFA
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <CardContent className="h-52 px-2">
+            {statsLoading ? (
+              <Skeleton className="h-full w-full rounded-lg" />
+            ) : statusData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={72} paddingAngle={2}>
+                    {statusData.map((entry) => (
+                      <Cell key={entry.name} fill={RESERVATION_STATUS_CONFIG[entry.name]?.color ?? "#94a3b8"} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => [v, "Réservations"]} />
+                  <Legend iconType="circle" iconSize={8} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-center text-muted-foreground">
+                <div className="size-12 rounded-full border-2 border-dashed border-muted-foreground/20 flex items-center justify-center">
+                  <span className="text-xs text-muted-foreground/40">0</span>
+                </div>
+                <p className="text-xs">Aucune réservation enregistrée</p>
+              </div>
+            )}
           </CardContent>
         </Card>
-      )}
+
+        <Card>
+          <CardHeader className="pb-2 pt-5 px-6">
+            <CardTitle className="text-sm font-semibold">Par type d'événement</CardTitle>
+          </CardHeader>
+          <CardContent className="h-52 px-2">
+            {statsLoading ? (
+              <Skeleton className="h-full w-full rounded-lg" />
+            ) : eventData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={eventData} margin={{ top: 4, right: 12, left: -16, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="value" name="Réservations" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-center text-muted-foreground">
+                <div className="flex gap-1 items-end h-8">
+                  {[3, 5, 2, 4, 1].map((h, i) => (
+                    <div key={i} className="w-4 rounded-sm bg-muted-foreground/10" style={{ height: `${h * 6}px` }} />
+                  ))}
+                </div>
+                <p className="text-xs">Aucune donnée d'événement</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Paginated reservations table */}
+      <Card>
+        <CardHeader className="pb-3 pt-5 px-6 border-b flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-semibold">
+            Réservations
+            {total > 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">({total})</span>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-hidden">
+            <Table>
+              <TableHeader className="bg-muted/30">
+                {table.getHeaderGroups().map((hg) => (
+                  <TableRow key={hg.id}>
+                    {hg.headers.map((header) => (
+                      <TableHead key={header.id}>
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {tableLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {columns.map((_, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : table.getRowModel().rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className="py-10 text-center text-sm text-muted-foreground">
+                      <FileText className="mx-auto mb-2 size-8 text-muted-foreground/40" />
+                      Aucune réservation pour ce bus.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow key={row.id}>
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Pagination */}
+          {lastPage > 1 && (
+            <>
+              <Separator />
+              <div className="flex items-center justify-between px-4 py-3">
+                <p className="text-xs text-muted-foreground">
+                  Page {page} sur {lastPage}
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline" size="icon" className="size-7"
+                    disabled={page <= 1 || tableLoading}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
+                    <ChevronLeft className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="outline" size="icon" className="size-7"
+                    disabled={page >= lastPage || tableLoading}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    <ChevronRight className="size-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -780,7 +916,6 @@ export default function BusDetailPage() {
 
         <div className="relative flex flex-col sm:flex-row sm:items-start justify-between gap-5">
           <div className="flex items-center gap-5">
-            {/* Plate badge */}
             <div className="flex items-stretch h-14 overflow-hidden rounded-lg border border-white/20 bg-white/5 shadow-inner shrink-0">
               <div className="flex items-center justify-center w-8 bg-primary/70">
                 <span className="text-[8px] font-black text-primary-foreground leading-none">RC</span>
@@ -823,10 +958,10 @@ export default function BusDetailPage() {
         {/* Quick strip */}
         <div className="relative mt-5 flex flex-wrap gap-6 border-t border-white/10 pt-4">
           {[
-            { l: "Capacité",  v: `${bus.capacity} pl.` },
+            { l: "Capacité",     v: `${bus.capacity} pl.` },
             { l: "Propriétaire", v: owner?.name ?? "—" },
-            { l: "Kilométrage", v: bus.mileageKm ? `${bus.mileageKm.toLocaleString("fr-FR")} km` : "—" },
-            { l: "Assurance",  v: formatDate(bus.insuranceValidUntil) },
+            { l: "Kilométrage",  v: bus.mileageKm ? `${bus.mileageKm.toLocaleString("fr-FR")} km` : "—" },
+            { l: "Assurance",    v: formatDate(bus.insuranceValidUntil) },
           ].map((s) => (
             <div key={s.l}>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">{s.l}</p>
@@ -869,21 +1004,18 @@ export default function BusDetailPage() {
         <TabsContent value="informations" className="mt-0 outline-none">
           <InformationsTab bus={bus} />
         </TabsContent>
-
         <TabsContent value="equipage" className="mt-0 outline-none">
           <EquipageTab bus={bus} people={people} onBusUpdated={setBus} />
         </TabsContent>
-
         <TabsContent value="documents" className="mt-0 outline-none">
           <DocumentsTab bus={bus} />
         </TabsContent>
-
         <TabsContent value="reservations" className="mt-0 outline-none">
           <ReservationsTab busId={bus.id} />
         </TabsContent>
       </Tabs>
 
-      {/* Edit Dialog */}
+      {/* Edit dialog */}
       <AddEditBusDialog
         open={editOpen}
         onOpenChange={setEditOpen}

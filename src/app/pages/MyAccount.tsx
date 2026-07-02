@@ -59,6 +59,20 @@ type MeShape = {
   phone?: string
   role?: string
   two_fa_enabled?: boolean
+  prefs?: {
+    language?: string
+    timezone?: string
+    currency?: string
+    dateFormat?: string
+  }
+  notifications?: {
+    emailBooking?: boolean
+    emailPayment?: boolean
+    emailCancellation?: boolean
+    smsBooking?: boolean
+    smsPayment?: boolean
+    smsCancellation?: boolean
+  }
   // Legacy fields
   firstName?: string
   lastName?: string
