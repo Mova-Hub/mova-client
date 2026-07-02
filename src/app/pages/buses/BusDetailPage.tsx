@@ -300,42 +300,101 @@ function UploadDocumentDialog({
 
 /* ─── Informations tab ───────────────────────────────────────────────────────── */
 
-function InformationsTab({ bus }: { bus: UIBus }) {
+function SpecItem({ label, value, mono = false }: { label: string; value?: React.ReactNode; mono?: boolean }) {
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      <div className="lg:col-span-2 space-y-6">
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</dt>
+      <dd className={`text-sm font-semibold ${mono ? "font-mono" : ""} ${!value ? "text-muted-foreground" : ""}`}>
+        {value ?? "—"}
+      </dd>
+    </div>
+  )
+}
+
+function InformationsTab({ bus }: { bus: UIBus }) {
+  const hasInsurance = bus.insuranceValidUntil || bus.insurancePolicyNumber || bus.insuranceProvider
+
+  return (
+    <div className="grid gap-5 lg:grid-cols-3">
+      {/* ── Left: vehicle specs (2/3) ── */}
+      <div className="lg:col-span-2 space-y-5">
+
+        {/* Identity card */}
         <Card>
-          <CardHeader className="pb-3 pt-5 px-6 border-b">
+          <CardHeader className="pb-0 pt-5 px-6">
             <CardTitle className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              <CarFront className="size-4 text-primary" /> Spécifications
+              <CarFront className="size-4 text-primary" /> Identification
             </CardTitle>
           </CardHeader>
           <CardContent className="px-6 py-5">
             <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5">
-              <Spec label="Marque" value={bus.brand} />
-              <Spec label="Modèle" value={bus.model} />
-              <Spec label="Type" value={prettyType(bus.type)} />
-              <Spec label="Énergie" value={bus.energyType ? (ENERGY_LABELS[bus.energyType] ?? bus.energyType) : undefined} />
-              <Spec label="Capacité" value={bus.capacity ? `${bus.capacity} places` : undefined} />
-              <Spec label="Année fab." value={bus.year ? String(bus.year) : undefined} />
-              <Spec label="1re mise en circ." value={bus.firstRegistrationYear ? String(bus.firstRegistrationYear) : undefined} />
-              <Spec label="N° châssis" value={bus.chassisNumber ? <span className="font-mono">{bus.chassisNumber}</span> : undefined} />
-              <Spec label="Kilométrage" value={bus.mileageKm ? `${bus.mileageKm.toLocaleString("fr-FR")} km` : undefined} />
-              <Spec label="Dernière révision" value={formatDate(bus.lastServiceDate)} />
+              <SpecItem label="Marque" value={bus.brand} />
+              <SpecItem label="Modèle" value={bus.model} />
+              <SpecItem label="Type" value={prettyType(bus.type)} />
+              <SpecItem label="Immatriculation" value={<span className="font-mono font-bold tracking-wider text-foreground">{bus.plate}</span>} />
+              <SpecItem label="N° châssis" value={bus.chassisNumber} mono />
+              <SpecItem label="Capacité" value={bus.capacity ? `${bus.capacity} places` : undefined} />
+            </dl>
+          </CardContent>
+        </Card>
+
+        {/* Technical card */}
+        <Card>
+          <CardHeader className="pb-0 pt-5 px-6">
+            <CardTitle className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              <CarFront className="size-4 text-primary" /> Caractéristiques techniques
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-6 py-5">
+            <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5">
+              <SpecItem label="Énergie" value={bus.energyType ? (ENERGY_LABELS[bus.energyType] ?? bus.energyType) : undefined} />
+              <SpecItem label="Année de fabrication" value={bus.year ? String(bus.year) : undefined} />
+              <SpecItem label="1re mise en circulation" value={bus.firstRegistrationYear ? String(bus.firstRegistrationYear) : undefined} />
+              <SpecItem label="Kilométrage" value={bus.mileageKm ? `${bus.mileageKm.toLocaleString("fr-FR")} km` : undefined} />
+              <SpecItem label="Dernière révision" value={formatDate(bus.lastServiceDate)} />
             </dl>
           </CardContent>
         </Card>
       </div>
 
-      <div className="space-y-4">
+      {/* ── Right column (1/3) ── */}
+      <div className="space-y-5">
+
+        {/* Operator card */}
         <Card>
-          <CardHeader className="pb-3 pt-5 px-6 border-b">
+          <CardHeader className="pb-0 pt-5 px-5">
+            <CardTitle className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Opérateur
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 py-4">
+            {bus.operatorName ? (
+              <div className="flex items-center gap-3">
+                <Avatar className="size-10 shrink-0">
+                  <AvatarFallback className="bg-amber-50 text-amber-700 font-bold text-sm">
+                    {initials(bus.operatorName)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold truncate">{bus.operatorName}</p>
+                  <p className="text-xs text-muted-foreground">Propriétaire</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground italic">Aucun opérateur assigné</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Compliance card */}
+        <Card>
+          <CardHeader className="pb-0 pt-5 px-5">
             <CardTitle className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
               <ShieldCheck className="size-4 text-primary" /> Conformité
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-6 py-5 space-y-3">
-            <CompliancePill label="Assurance" date={bus.insuranceValidUntil} />
+          <CardContent className="px-5 py-4 space-y-3">
+            <CompliancePill label="Assurance valide jusqu'au" date={bus.insuranceValidUntil} />
             {bus.insurancePolicyNumber && (
               <div className="rounded-lg border bg-muted/30 px-4 py-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">N° Police</p>
@@ -347,6 +406,9 @@ function InformationsTab({ bus }: { bus: UIBus }) {
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Assureur</p>
                 <p className="text-sm font-medium">{bus.insuranceProvider}</p>
               </div>
+            )}
+            {!hasInsurance && (
+              <p className="text-sm text-muted-foreground italic">Aucune donnée d'assurance</p>
             )}
           </CardContent>
         </Card>

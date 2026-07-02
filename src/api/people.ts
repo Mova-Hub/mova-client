@@ -3,20 +3,44 @@ import api, { buildQuery } from "@/api/apiService"
 
 /* ----------------------------- Server DTOs -------------------------------- */
 
-export type PersonRole = "driver" | "conductor" | "owner"
+export type PersonRole   = "driver" | "conductor" | "owner"
 export type PersonStatus = "active" | "inactive" | "suspended"
+
+export type PersonAddress = {
+  street?: string | null
+  quartier?: string | null
+  arrondissement?: string | null
+  city?: string | null
+  department?: string | null
+  country?: string | null
+}
+
+export type AssignedBusSnippet = {
+  id: string | number
+  plate: string
+  brand?: string | null
+  model?: string | null
+  type?: string | null
+  status?: string | null
+  role?: "driver" | "conductor" | null // the person's role on this bus
+}
 
 export type PersonDto = {
   id: number
   name: string
+  first_name?: string | null
   email?: string | null
   phone?: string | null
   role: PersonRole
   status?: PersonStatus | null
-  // accept either avatar_url or avatar (if resource uses a different key)
   avatar_url?: string | null
   avatar?: string | null
   license_no?: string | null
+  permit_expiration_date?: string | null
+  address?: PersonAddress | null
+  assigned_buses?: AssignedBusSnippet[] | null
+  owned_buses?: AssignedBusSnippet[] | null
+  stats?: { bus_count?: number } | null
   created_at?: string
   updated_at?: string
 }
@@ -45,12 +69,18 @@ export type ListParams = {
 export type Person = {
   id: string
   name: string
+  firstName?: string
   email?: string
   phone?: string
   role: PersonRole
   status?: PersonStatus
-  avatar?: string       // UI field; maps to avatar_url
-  licenseNo?: string    // UI field; maps to license_no
+  avatar?: string
+  licenseNo?: string
+  permitExpirationDate?: string
+  address?: PersonAddress
+  assignedBuses?: AssignedBusSnippet[]
+  ownedBuses?: AssignedBusSnippet[]
+  stats?: { busCount?: number }
   createdAt?: string
 }
 
@@ -58,29 +88,44 @@ export function toPerson(u: PersonDto): Person {
   return {
     id: String(u.id),
     name: u.name,
+    firstName: u.first_name ?? undefined,
     email: u.email ?? undefined,
     phone: u.phone ?? undefined,
     role: u.role,
     status: (u.status ?? undefined) as PersonStatus | undefined,
     avatar: (u.avatar_url ?? u.avatar) ?? undefined,
     licenseNo: u.license_no ?? undefined,
+    permitExpirationDate: u.permit_expiration_date ?? undefined,
+    address: u.address ?? undefined,
+    assignedBuses: u.assigned_buses?.map((b) => ({
+      ...b,
+      id: String(b.id),
+    })) ?? undefined,
+    ownedBuses: u.owned_buses?.map((b) => ({
+      ...b,
+      id: String(b.id),
+    })) ?? undefined,
+    stats: u.stats ? { busCount: u.stats.bus_count } : undefined,
     createdAt: u.created_at,
   }
 }
 
 export function toPayload(p: Partial<Person & { password?: string }>) {
   const body: Record<string, unknown> = {}
-  if (p.name !== undefined) body.name = p.name
-  if (p.email !== undefined) body.email = p.email || null
-  if (p.phone !== undefined) body.phone = p.phone || null // nullable on backend
-  if (p.role !== undefined) body.role = p.role
-  if (p.status !== undefined) body.status = p.status
-  if (p.avatar !== undefined) {
+  if (p.name       !== undefined) body.name       = p.name
+  if (p.firstName  !== undefined) body.first_name  = p.firstName || null
+  if (p.email      !== undefined) body.email       = p.email || null
+  if (p.phone      !== undefined) body.phone       = p.phone || null
+  if (p.role       !== undefined) body.role        = p.role
+  if (p.status     !== undefined) body.status      = p.status
+  if (p.licenseNo  !== undefined) body.license_no  = p.licenseNo || null
+  if (p.permitExpirationDate !== undefined) body.permit_expiration_date = p.permitExpirationDate || null
+  if (p.address    !== undefined) body.address     = p.address ?? null
+  if (p.avatar     !== undefined) {
     body.avatar_url = p.avatar || null
-    body.avatar = p.avatar || null // for backends using "avatar"
+    body.avatar     = p.avatar || null
   }
-  if (p.licenseNo !== undefined) body.license_no = p.licenseNo || null
-  if (p.password !== undefined) body.password = p.password || null
+  if (p.password   !== undefined) body.password    = p.password || null
   return body
 }
 
@@ -133,4 +178,11 @@ async function setRole(id: string | number, role: PersonRole) {
   return { ...res, data: toPerson(res.data) }
 }
 
-export default { list, get, create, update, remove, bulkStatus, setRole }
+async function uploadAvatar(id: string | number, file: File) {
+  const fd = new FormData()
+  fd.append("avatar", file)
+  const res = await api.post<PersonDto, FormData>(`/person/${id}/avatar`, fd)
+  return { ...res, data: toPerson(res.data) }
+}
+
+export default { list, get, create, update, remove, bulkStatus, setRole, uploadAvatar }

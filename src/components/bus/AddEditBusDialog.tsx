@@ -14,30 +14,18 @@ import { Switch } from "@/components/ui/switch"
 import { Calendar } from "@/components/ui/calendar"
 import { Badge } from "@/components/ui/badge"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
+  Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "@/components/ui/command"
 import { toast } from "sonner"
 
-import type { UIBus } from "@/api/bus"
+import type { UIBus, BusStatus, BusType } from "@/api/bus"
 import type { Person } from "@/api/people"
-import type { BusStatus, BusType } from "@/api/bus"
 import { cn } from "@/lib/utils"
 import useAuth from "@/hooks/useAuth"
 
@@ -80,7 +68,208 @@ const STEPS = [
   { id: 4, label: "Assurance",      description: "Contrat d'assurance" },
 ] as const
 
-type Id = Person["id"]
+type PersonId = Person["id"] // string
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Helper components defined at MODULE LEVEL (not inside AddEditBusDialog).
+   This is critical: if they were defined inside the component function,
+   React would see a new component type each render and unmount/remount them,
+   which causes open Popovers to be torn down and the parent Dialog to close.
+────────────────────────────────────────────────────────────────────────────── */
+
+/* ── DatePicker ── */
+function BusDatePicker({
+  value, onChange, placeholder = "Choisir une date",
+}: {
+  value: string; onChange: (v: string) => void; placeholder?: string
+}) {
+  const parsed = value ? new Date(value) : undefined
+  const [open, setOpen] = React.useState(false)
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" className="justify-between w-full font-normal">
+          {parsed
+            ? format(parsed, "PPP", { locale: fr })
+            : <span className="text-muted-foreground">{placeholder}</span>}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="ml-2 size-4 opacity-60 shrink-0">
+            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 011.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.25 8.29a.75.75 0 01-.02-1.08z" clipRule="evenodd" />
+          </svg>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="p-0" onEscapeKeyDown={(e) => e.stopPropagation()}>
+        <Calendar
+          mode="single"
+          selected={parsed}
+          onSelect={(d) => { onChange(d ? format(d, "yyyy-MM-dd") : ""); setOpen(false) }}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/* ── Generic ComboBox ── */
+function BusComboBox<T extends string | number>({
+  value, onChange, options, placeholder, emptyText = "Aucun résultat",
+  getLabel, includeCurrentValue, disabled,
+}: {
+  value: T | ""
+  onChange: (v: T | "") => void
+  options: readonly T[]
+  placeholder: string
+  emptyText?: string
+  getLabel?: (v: T) => string | undefined
+  includeCurrentValue?: boolean
+  disabled?: boolean
+}) {
+  const [open, setOpen] = React.useState(false)
+  const selectedLabel = value !== "" ? (getLabel ? getLabel(value as T) : String(value)) : ""
+
+  const preparedOptions = React.useMemo(() => {
+    const set = new Set(options.map((o) => String(o)))
+    const arr: T[] = [...options] as T[]
+    if (includeCurrentValue && value !== "" && !set.has(String(value))) arr.unshift(value as T)
+    return arr
+  }, [options, value, includeCurrentValue])
+
+  return (
+    <Popover open={!disabled && open} onOpenChange={(o) => !disabled && setOpen(o)}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button" variant="outline" role="combobox" aria-expanded={open} disabled={disabled}
+          className={cn("justify-between w-full font-normal", disabled && "opacity-70 cursor-not-allowed")}
+        >
+          {selectedLabel
+            ? <span>{selectedLabel}</span>
+            : <span className="text-muted-foreground">{placeholder}</span>}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="ml-2 size-4 opacity-60 shrink-0">
+            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 011.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.25 8.29a.75.75 0 01-.02-1.08z" clipRule="evenodd" />
+          </svg>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="p-0 w-[--radix-popover-trigger-width] min-w-[220px]"
+        onEscapeKeyDown={(e) => e.stopPropagation()}
+      >
+        <Command>
+          <CommandInput placeholder="Rechercher…" />
+          <CommandList>
+            <CommandEmpty>{emptyText}</CommandEmpty>
+            <CommandGroup>
+              <CommandItem onSelect={() => { onChange(""); setOpen(false) }}>— Aucun —</CommandItem>
+              {preparedOptions.map((opt) => {
+                const label = getLabel ? getLabel(opt) : String(opt)
+                return (
+                  <CommandItem key={String(opt)} onSelect={() => { onChange(opt); setOpen(false) }}>
+                    {label || String(opt)}
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+/* ── Person ComboBox ── */
+function PersonCombo({
+  value, onChange, people, fallbackLabels, placeholder, disabled,
+}: {
+  value: PersonId | ""
+  onChange: (v: PersonId | "") => void
+  people: Person[]
+  fallbackLabels: Map<string, string>
+  placeholder: string
+  disabled?: boolean
+}) {
+  const ids = React.useMemo(() => people.map((p) => p.id), [people])
+
+  const getLabel = React.useCallback((id: PersonId) => {
+    if (!id) return undefined
+    const found = people.find((p) => p.id === id)
+    if (found) return `${found.name}${found.phone ? ` · ${found.phone}` : ""}`
+    return fallbackLabels.get(String(id))
+  }, [people, fallbackLabels])
+
+  return (
+    <BusComboBox<PersonId>
+      value={value}
+      onChange={onChange}
+      options={ids}
+      includeCurrentValue
+      placeholder={placeholder}
+      disabled={disabled}
+      getLabel={getLabel}
+    />
+  )
+}
+
+/* ── Step indicator ── */
+function StepIndicator({
+  currentStep, onStepClick,
+}: {
+  currentStep: number
+  onStepClick: (step: number) => void
+}) {
+  return (
+    <div className="flex items-start mt-4">
+      {STEPS.map((step, idx) => (
+        <React.Fragment key={step.id}>
+          <div className="flex flex-col items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => { if (step.id < currentStep) onStepClick(step.id) }}
+              className={cn(
+                "size-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-200",
+                currentStep === step.id
+                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                  : step.id < currentStep
+                    ? "bg-primary/15 text-primary border-primary/40 hover:bg-primary/25 cursor-pointer"
+                    : "bg-muted/60 text-muted-foreground border-border cursor-default"
+              )}
+            >
+              {step.id < currentStep ? <Check className="size-3.5" /> : step.id}
+            </button>
+            <span className={cn(
+              "text-[10px] font-semibold leading-none text-center w-16",
+              currentStep === step.id ? "text-foreground" : "text-muted-foreground"
+            )}>
+              {step.label}
+            </span>
+          </div>
+          {idx < STEPS.length - 1 && (
+            <div className={cn(
+              "flex-1 h-px mt-4 mx-1.5 transition-colors",
+              step.id < currentStep ? "bg-primary/30" : "bg-border"
+            )} />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  )
+}
+
+/* ── Step badge ── */
+function StepBadge({ currentStep }: { currentStep: number }) {
+  const s = STEPS[currentStep - 1]
+  if (!s) return null
+  return (
+    <div className="flex items-center gap-2 mb-5">
+      <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0.5 text-primary border-primary/30 bg-primary/5">
+        Étape {s.id}/4
+      </Badge>
+      <div>
+        <p className="text-sm font-semibold leading-none">{s.label}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{s.description}</p>
+      </div>
+    </div>
+  )
+}
+
+/* ─── Main dialog ─────────────────────────────────────────────────────────────── */
 
 export type AddEditBusDialogProps = {
   open: boolean
@@ -103,14 +292,14 @@ export default function AddEditBusDialog({
     return role === "admin" || role === "superadmin"
   }, [user?.role])
 
-  /* ─── Step state ─────────────────────────────────────────────────────────── */
+  /* ─── Step state ── */
   const [currentStep, setCurrentStep] = React.useState(1)
 
   React.useEffect(() => {
     if (open) setCurrentStep(1)
   }, [open])
 
-  /* ─── Form state ─────────────────────────────────────────────────────────── */
+  /* ─── Form state ── */
   const [plate, setPlate] = React.useState("")
   const [brand, setBrand] = React.useState("")
   const [capacity, setCapacity] = React.useState<number>(49)
@@ -122,9 +311,9 @@ export default function AddEditBusDialog({
   const [firstRegistrationYear, setFirstRegistrationYear] = React.useState<number | "">("")
   const [chassisNumber, setChassisNumber] = React.useState("")
   const [mileageKm, setMileageKm] = React.useState<number | "">("")
-  const [operatorId, setOperatorId] = React.useState<Id | "">("")
-  const [assignedDriverId, setAssignedDriverId] = React.useState<Id | "">("")
-  const [assignedConductorId, setAssignedConductorId] = React.useState<Id | "">("")
+  const [operatorId, setOperatorId] = React.useState<PersonId | "">("")
+  const [assignedDriverId, setAssignedDriverId] = React.useState<PersonId | "">("")
+  const [assignedConductorId, setAssignedConductorId] = React.useState<PersonId | "">("")
   const [lastServiceDate, setLastServiceDate] = React.useState<string>("")
 
   const [hasInsurance, setHasInsurance] = React.useState(false)
@@ -132,30 +321,20 @@ export default function AddEditBusDialog({
   const [insPolicy, setInsPolicy] = React.useState<string>("")
   const [insValidUntil, setInsValidUntil] = React.useState<string>("")
 
-  /* ─── People lists ───────────────────────────────────────────────────────── */
-  const owners     = React.useMemo(() => people.filter((p) => p.role === "owner"), [people])
-  const drivers    = React.useMemo(() => people.filter((p) => p.role === "driver"), [people])
+  /* ─── People lists ── */
+  const owners     = React.useMemo(() => people.filter((p) => p.role === "owner"),     [people])
+  const drivers    = React.useMemo(() => people.filter((p) => p.role === "driver"),    [people])
   const conductors = React.useMemo(() => people.filter((p) => p.role === "conductor"), [people])
 
-  const fallbackPersonLabels = React.useMemo(() => {
+  const fallbackLabels = React.useMemo<Map<string, string>>(() => {
     const map = new Map<string, string>()
-    if (editing?.operatorId      && editing.operatorName)   map.set(String(editing.operatorId), editing.operatorName)
-    if (editing?.assignedDriverId && editing.driverName)    map.set(String(editing.assignedDriverId), editing.driverName)
+    if (editing?.operatorId      && editing.operatorName)    map.set(String(editing.operatorId),         editing.operatorName)
+    if (editing?.assignedDriverId && editing.driverName)     map.set(String(editing.assignedDriverId),   editing.driverName)
     if (editing?.assignedConductorId && editing.conductorName) map.set(String(editing.assignedConductorId), editing.conductorName)
     return map
   }, [editing?.operatorId, editing?.operatorName, editing?.assignedDriverId, editing?.driverName, editing?.assignedConductorId, editing?.conductorName])
 
-  const getPersonLabel = React.useCallback(
-    (id: Id | ""): string | undefined => {
-      if (!id) return undefined
-      const found = people.find((p) => p.id === id)
-      if (found) return `${found.name}${found.phone ? ` - ${found.phone}` : ""}`
-      return fallbackPersonLabels.get(String(id))
-    },
-    [people, fallbackPersonLabels]
-  )
-
-  /* ─── Hydration ──────────────────────────────────────────────────────────── */
+  /* ─── Hydration ── */
   React.useEffect(() => {
     if (editing) {
       setPlate(editing.plate ?? "")
@@ -169,12 +348,12 @@ export default function AddEditBusDialog({
       setFirstRegistrationYear(editing.firstRegistrationYear ?? "")
       setChassisNumber(editing.chassisNumber ?? "")
       setMileageKm(editing.mileageKm ?? "")
-      setOperatorId((editing.operatorId as Id | undefined) ?? "")
-      setAssignedDriverId((editing.assignedDriverId as Id | undefined) ?? "")
-      setAssignedConductorId((editing.assignedConductorId as Id | undefined) ?? "")
+      setOperatorId((editing.operatorId as PersonId | undefined) ?? "")
+      setAssignedDriverId((editing.assignedDriverId as PersonId | undefined) ?? "")
+      setAssignedConductorId((editing.assignedConductorId as PersonId | undefined) ?? "")
       setLastServiceDate(editing.lastServiceDate ?? "")
-      const hasAnyInsurance = Boolean(editing.insuranceProvider || editing.insurancePolicyNumber || editing.insuranceValidUntil)
-      setHasInsurance(hasAnyInsurance)
+      const hasAny = Boolean(editing.insuranceProvider || editing.insurancePolicyNumber || editing.insuranceValidUntil)
+      setHasInsurance(hasAny)
       setInsProvider(editing.insuranceProvider ?? "")
       setInsPolicy(editing.insurancePolicyNumber ?? "")
       setInsValidUntil(editing.insuranceValidUntil ?? "")
@@ -187,32 +366,32 @@ export default function AddEditBusDialog({
     }
   }, [editing])
 
-  /* ─── Navigation ─────────────────────────────────────────────────────────── */
+  /* ─── Navigation ── */
   function handleNext() {
-    if (currentStep === 1) {
-      if (!plate.trim()) { toast.error("L'immatriculation est obligatoire."); return }
+    if (currentStep === 1 && !plate.trim()) {
+      toast.error("L'immatriculation est obligatoire."); return
     }
-    if (currentStep === 2) {
-      if (!capacity || Number(capacity) < 1) { toast.error("La capacité doit être un nombre positif."); return }
+    if (currentStep === 2 && (!capacity || Number(capacity) < 1)) {
+      toast.error("La capacité doit être un nombre positif."); return
     }
     if (currentStep < 4) setCurrentStep((s) => s + 1)
   }
 
-  /* ─── Submit ─────────────────────────────────────────────────────────────── */
+  /* ─── Submit ── */
   function isIsoDate(v: string) { return /^\d{4}-\d{2}-\d{2}$/.test(v) }
-  function asStringOrUndefined(v: unknown) {
+  function asStrOrUndef(v: unknown): string | undefined {
     if (v === "" || v === undefined || v === null) return undefined
     return String(v)
   }
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!plate.trim()) { toast.error("L'immatriculation est obligatoire."); return }
     if (!capacity || Number(capacity) < 1) { toast.error("La capacité doit être un nombre positif."); return }
 
-    const lockedOperatorId   = !isAdmin ? editing?.operatorId   : operatorId
-    const lockedDriverId     = !isAdmin ? editing?.assignedDriverId : assignedDriverId
-    const lockedConductorId  = !isAdmin ? editing?.assignedConductorId : assignedConductorId
+    const lockedOperatorId    = !isAdmin ? editing?.operatorId          : operatorId
+    const lockedDriverId      = !isAdmin ? editing?.assignedDriverId    : assignedDriverId
+    const lockedConductorId   = !isAdmin ? editing?.assignedConductorId : assignedConductorId
 
     const payload: Partial<UIBus> & { id?: string } = {
       ...(editing?.id ? { id: editing.id } : {}),
@@ -227,9 +406,9 @@ export default function AddEditBusDialog({
       firstRegistrationYear: firstRegistrationYear === "" ? undefined : Number(firstRegistrationYear),
       chassisNumber: chassisNumber.trim() || undefined,
       mileageKm: mileageKm === "" ? undefined : Number(mileageKm),
-      operatorId: asStringOrUndefined(lockedOperatorId),
-      assignedDriverId: asStringOrUndefined(lockedDriverId),
-      assignedConductorId: asStringOrUndefined(lockedConductorId),
+      operatorId: asStrOrUndef(lockedOperatorId),
+      assignedDriverId: asStrOrUndef(lockedDriverId),
+      assignedConductorId: asStrOrUndef(lockedConductorId),
       lastServiceDate: lastServiceDate && isIsoDate(lastServiceDate) ? lastServiceDate : undefined,
       ...(hasInsurance && (insProvider.trim() || insPolicy.trim() || insValidUntil.trim())
         ? {
@@ -244,184 +423,27 @@ export default function AddEditBusDialog({
     onOpenChange(false)
   }
 
-  /* ─── UI helpers ─────────────────────────────────────────────────────────── */
-
-  function ComboBox<T extends string | number>({
-    value, onChange, options, placeholder, emptyText = "Aucun résultat",
-    getLabel, includeCurrentValue, disabled,
-  }: {
-    value: T | ""
-    onChange: (v: T | "") => void
-    options: readonly T[]
-    placeholder: string
-    emptyText?: string
-    getLabel?: (v: T) => string | undefined
-    includeCurrentValue?: boolean
-    disabled?: boolean
-  }) {
-    const [open, setOpen] = React.useState(false)
-    const selectedLabel = value !== "" ? (getLabel ? getLabel(value as T) : String(value)) : ""
-    const preparedOptions = React.useMemo(() => {
-      const set = new Set(options.map((o) => String(o)))
-      const arr: T[] = [...options] as T[]
-      if (includeCurrentValue && value !== "" && !set.has(String(value))) arr.unshift(value as T)
-      return arr
-    }, [options, value, includeCurrentValue])
-
-    return (
-      <Popover open={!disabled && open} onOpenChange={(o) => !disabled && setOpen(o)}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button" variant="outline" role="combobox" aria-expanded={open} disabled={disabled}
-            className={cn("justify-between w-full font-normal", disabled && "opacity-70 cursor-not-allowed")}
-          >
-            {selectedLabel
-              ? <span>{selectedLabel}</span>
-              : <span className="text-muted-foreground">{placeholder}</span>}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="ml-2 size-4 opacity-60 shrink-0">
-              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 011.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.25 8.29a.75.75 0 01-.02-1.08z" clipRule="evenodd" />
-            </svg>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="p-0 w-[--radix-popover-trigger-width] min-w-[220px]">
-          <Command>
-            <CommandInput placeholder={`Rechercher…`} />
-            <CommandList>
-              <CommandEmpty>{emptyText}</CommandEmpty>
-              <CommandGroup>
-                <CommandItem onSelect={() => { onChange(""); setOpen(false) }}>— Aucun —</CommandItem>
-                {preparedOptions.map((opt) => {
-                  const label = getLabel ? getLabel(opt) : String(opt)
-                  return (
-                    <CommandItem key={String(opt)} onSelect={() => { onChange(opt); setOpen(false) }}>
-                      {label || String(opt)}
-                    </CommandItem>
-                  )
-                })}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    )
-  }
-
-  function PersonCombo({ value, onChange, people: ps, placeholder, disabled }: {
-    value: Id | ""; onChange: (v: Id | "") => void; people: Person[]; placeholder: string; disabled?: boolean
-  }) {
-    const ids = React.useMemo(() => ps.map((p) => p.id), [ps])
-    return (
-      <ComboBox<Id>
-        value={value} onChange={onChange} options={ids} includeCurrentValue
-        placeholder={placeholder} disabled={disabled} getLabel={(id) => getPersonLabel(id)}
-      />
-    )
-  }
-
-  function DatePicker({ value, onChange, placeholder = "Choisir une date" }: {
-    value: string; onChange: (v: string) => void; placeholder?: string
-  }) {
-    const parsed = value ? new Date(value) : undefined
-    const [open, setOpen] = React.useState(false)
-    return (
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button type="button" variant="outline" className="justify-between w-full font-normal">
-            {parsed
-              ? format(parsed, "PPP", { locale: fr })
-              : <span className="text-muted-foreground">{placeholder}</span>}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="ml-2 size-4 opacity-60 shrink-0">
-              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 011.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.25 8.29a.75.75 0 01-.02-1.08z" clipRule="evenodd" />
-            </svg>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="p-0">
-          <Calendar mode="single" selected={parsed} onSelect={(d) => { onChange(d ? format(d, "yyyy-MM-dd") : ""); setOpen(false) }} initialFocus />
-        </PopoverContent>
-      </Popover>
-    )
-  }
-
-  /* ─── Step indicator ─────────────────────────────────────────────────────── */
-  function StepIndicator() {
-    return (
-      <div className="flex items-start mt-4">
-        {STEPS.map((step, idx) => (
-          <React.Fragment key={step.id}>
-            <div className="flex flex-col items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => step.id < currentStep && setCurrentStep(step.id)}
-                className={cn(
-                  "size-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-200",
-                  currentStep === step.id
-                    ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                    : step.id < currentStep
-                      ? "bg-primary/15 text-primary border-primary/40 hover:bg-primary/25 cursor-pointer"
-                      : "bg-muted/60 text-muted-foreground border-border cursor-default"
-                )}
-              >
-                {step.id < currentStep ? <Check className="size-3.5" /> : step.id}
-              </button>
-              <span className={cn(
-                "text-[10px] font-semibold leading-none text-center w-16",
-                currentStep === step.id ? "text-foreground" : "text-muted-foreground"
-              )}>
-                {step.label}
-              </span>
-            </div>
-            {idx < STEPS.length - 1 && (
-              <div className={cn(
-                "flex-1 h-px mt-4 mx-1.5 transition-colors",
-                step.id < currentStep ? "bg-primary/30" : "bg-border"
-              )} />
-            )}
-          </React.Fragment>
-        ))}
-      </div>
-    )
-  }
-
-  /* ─── Step content ───────────────────────────────────────────────────────── */
-
-  function StepBadge({ step }: { step: number }) {
-    const s = STEPS[step - 1]
-    return (
-      <div className="flex items-center gap-2 mb-5">
-        <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0.5 text-primary border-primary/30 bg-primary/5">
-          Étape {s.id}/4
-        </Badge>
-        <div>
-          <p className="text-sm font-semibold leading-none">{s.label}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{s.description}</p>
-        </div>
-      </div>
-    )
-  }
-
-  /* ─── Render ─────────────────────────────────────────────────────────────── */
+  /* ─── Render ── */
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl flex flex-col max-h-[92vh] p-0 gap-0">
 
-        {/* Header + step indicator */}
         <DialogHeader className="px-6 pt-5 pb-4 shrink-0">
           <DialogTitle className="text-base">
             {editing ? "Modifier un bus" : "Ajouter un bus"}
           </DialogTitle>
-          <StepIndicator />
+          <StepIndicator currentStep={currentStep} onStepClick={setCurrentStep} />
         </DialogHeader>
 
         <Separator />
 
-        {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <form id="bus-form" onSubmit={submit}>
 
             {/* ── Step 1: Identification ── */}
             {currentStep === 1 && (
               <div>
-                <StepBadge step={1} />
+                <StepBadge currentStep={currentStep} />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
                   <div className="grid gap-1.5 sm:col-span-2">
@@ -430,7 +452,7 @@ export default function AddEditBusDialog({
                       id="plate"
                       value={plate}
                       onChange={(e) => setPlate(e.target.value.toUpperCase())}
-                      placeholder="KDC 123A"
+                      placeholder="AB 123 CD"
                       className="font-mono tracking-widest uppercase text-base"
                     />
                   </div>
@@ -466,7 +488,7 @@ export default function AddEditBusDialog({
 
                   <div className="grid gap-1.5">
                     <Label>Modèle</Label>
-                    <ComboBox
+                    <BusComboBox
                       value={model}
                       onChange={(v) => setModel((v as string) || "")}
                       options={MODEL_OPTIONS}
@@ -480,7 +502,7 @@ export default function AddEditBusDialog({
             {/* ── Step 2: Technique ── */}
             {currentStep === 2 && (
               <div>
-                <StepBadge step={2} />
+                <StepBadge currentStep={currentStep} />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
                   <div className="grid gap-1.5">
@@ -550,7 +572,7 @@ export default function AddEditBusDialog({
 
                   <div className="grid gap-1.5 sm:col-span-2">
                     <Label>Dernière révision</Label>
-                    <DatePicker value={lastServiceDate} onChange={setLastServiceDate} />
+                    <BusDatePicker value={lastServiceDate} onChange={setLastServiceDate} />
                   </div>
                 </div>
               </div>
@@ -559,21 +581,42 @@ export default function AddEditBusDialog({
             {/* ── Step 3: Équipe ── */}
             {currentStep === 3 && (
               <div>
-                <StepBadge step={3} />
+                <StepBadge currentStep={currentStep} />
                 <div className="grid gap-4">
                   <div className="grid gap-1.5">
                     <Label>Propriétaire / Opérateur</Label>
-                    <PersonCombo value={operatorId} onChange={setOperatorId} people={owners} placeholder="Choisir le propriétaire" disabled={!isAdmin} />
+                    <PersonCombo
+                      value={operatorId}
+                      onChange={setOperatorId}
+                      people={owners}
+                      fallbackLabels={fallbackLabels}
+                      placeholder="Choisir le propriétaire"
+                      disabled={!isAdmin}
+                    />
                     {!isAdmin && <p className="text-[11px] text-muted-foreground">Réservé aux administrateurs</p>}
                   </div>
                   <div className="grid gap-1.5">
                     <Label>Chauffeur</Label>
-                    <PersonCombo value={assignedDriverId} onChange={setAssignedDriverId} people={drivers} placeholder="Choisir le chauffeur" disabled={!isAdmin} />
+                    <PersonCombo
+                      value={assignedDriverId}
+                      onChange={setAssignedDriverId}
+                      people={drivers}
+                      fallbackLabels={fallbackLabels}
+                      placeholder="Choisir le chauffeur"
+                      disabled={!isAdmin}
+                    />
                     {!isAdmin && <p className="text-[11px] text-muted-foreground">Réservé aux administrateurs</p>}
                   </div>
                   <div className="grid gap-1.5">
                     <Label>Receveur / Convoyeur</Label>
-                    <PersonCombo value={assignedConductorId} onChange={setAssignedConductorId} people={conductors} placeholder="Choisir le receveur" disabled={!isAdmin} />
+                    <PersonCombo
+                      value={assignedConductorId}
+                      onChange={setAssignedConductorId}
+                      people={conductors}
+                      fallbackLabels={fallbackLabels}
+                      placeholder="Choisir le receveur"
+                      disabled={!isAdmin}
+                    />
                     {!isAdmin && <p className="text-[11px] text-muted-foreground">Réservé aux administrateurs</p>}
                   </div>
                 </div>
@@ -583,7 +626,7 @@ export default function AddEditBusDialog({
             {/* ── Step 4: Assurance ── */}
             {currentStep === 4 && (
               <div>
-                <StepBadge step={4} />
+                <StepBadge currentStep={currentStep} />
 
                 <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3 mb-5">
                   <div>
@@ -597,7 +640,7 @@ export default function AddEditBusDialog({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-1.5">
                       <Label>Assureur</Label>
-                      <ComboBox
+                      <BusComboBox
                         value={insProvider}
                         onChange={(v) => setInsProvider((v as string) || "")}
                         options={PROVIDERS}
@@ -610,7 +653,7 @@ export default function AddEditBusDialog({
                     </div>
                     <div className="grid gap-1.5 sm:col-span-2">
                       <Label>Valide jusqu'au</Label>
-                      <DatePicker value={insValidUntil} onChange={setInsValidUntil} placeholder="Choisir une date d'expiration" />
+                      <BusDatePicker value={insValidUntil} onChange={setInsValidUntil} placeholder="Choisir une date d'expiration" />
                     </div>
                   </div>
                 ) : (
@@ -629,7 +672,6 @@ export default function AddEditBusDialog({
 
         <Separator />
 
-        {/* Footer navigation */}
         <div className="flex items-center justify-between px-6 py-4 shrink-0 bg-background">
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
