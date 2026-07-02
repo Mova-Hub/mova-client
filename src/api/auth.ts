@@ -220,6 +220,16 @@ const auth = {
     return await putOrPatch(path, body)
   },
 
+  /** Verify current user's password without changing it. Returns true if correct. */
+  async verifyPassword(password: string): Promise<boolean> {
+    try {
+      const res = await apiService.post<{ valid: boolean }>("/auth/verify-password", { password })
+      return res.data?.valid === true
+    } catch {
+      return false
+    }
+  },
+
   /** Upload avatar; expects a FormData with key "avatar". */
   async uploadAvatar(
     formData: FormData,

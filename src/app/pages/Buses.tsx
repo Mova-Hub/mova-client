@@ -7,7 +7,22 @@ import { IconPencil, IconPower } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+
+import auth from "@/api/auth"
 
 import { type ColumnDef } from "@tanstack/react-table"
 
@@ -64,6 +79,129 @@ function toBusType(v?: string | null): BusType | undefined {
   return ALLOWED_BUS_TYPES.has(key) ? key : undefined
 }
 
+/* --------------------- Delete confirmation dialogs --------------------- */
+
+function DeleteBusDialog({
+  bus,
+  onClose,
+  onConfirm,
+}: {
+  bus: UIBus | null
+  onClose: () => void
+  onConfirm: (b: UIBus) => Promise<void>
+}) {
+  const [input, setInput] = React.useState("")
+  const [deleting, setDeleting] = React.useState(false)
+
+  React.useEffect(() => { if (bus) setInput("") }, [bus])
+
+  const matches = input.trim().toUpperCase() === (bus?.plate ?? "").toUpperCase()
+
+  async function handleConfirm() {
+    if (!bus || !matches) return
+    setDeleting(true)
+    try { await onConfirm(bus) } finally { setDeleting(false) }
+  }
+
+  return (
+    <AlertDialog open={!!bus} onOpenChange={(open) => { if (!open && !deleting) onClose() }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Supprimer ce bus ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Cette action est irréversible. Saisissez{" "}
+            <span className="font-mono font-semibold text-foreground">{bus?.plate}</span>{" "}
+            pour confirmer.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="grid gap-1.5">
+          <Label>Immatriculation</Label>
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value.toUpperCase())}
+            placeholder={bus?.plate}
+            className="font-mono"
+            onKeyDown={(e) => e.key === "Enter" && matches && handleConfirm()}
+          />
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose} disabled={deleting}>Annuler</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!matches || deleting}
+            onClick={handleConfirm}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {deleting ? "Suppression…" : "Supprimer"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+function BulkDeleteDialog({
+  targets,
+  onClose,
+  onConfirm,
+}: {
+  targets: UIBus[] | null
+  onClose: () => void
+  onConfirm: (password: string) => Promise<void>
+}) {
+  const [password, setPassword] = React.useState("")
+  const [error, setError] = React.useState("")
+  const [loading, setLoading] = React.useState(false)
+
+  React.useEffect(() => { if (targets) { setPassword(""); setError("") } }, [targets])
+
+  async function handleSubmit() {
+    if (!password) return
+    setError("")
+    setLoading(true)
+    try {
+      await onConfirm(password)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Mot de passe incorrect.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <AlertDialog open={!!targets} onOpenChange={(open) => { if (!open && !loading) onClose() }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Supprimer {targets?.length ?? 0} bus ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Cette action est irréversible. Confirmez avec votre mot de passe.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="grid gap-1.5">
+          <Label>Mot de passe</Label>
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose} disabled={loading}>Annuler</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!password || loading}
+            onClick={handleSubmit}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {loading ? "Vérification…" : "Supprimer"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 /* --------------------- helpers --------------------- */
 
 const uuid = (): string => {
@@ -118,6 +256,8 @@ export default function BusesPage() {
   const [open, setOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<UIBus | null>(null)
   const [openImport, setOpenImport] = React.useState(false)
+  const [busToDelete, setBusToDelete] = React.useState<UIBus | null>(null)
+  const [bulkDeleteTargets, setBulkDeleteTargets] = React.useState<UIBus[] | null>(null)
 
   // People cache for dialog dropdowns / fallbacks
   const [people, setPeople] = React.useState<Person[]>([])
@@ -307,7 +447,7 @@ export default function BusesPage() {
   // getRowId (typed id param if you use it elsewhere)
   const getRowId = (r: UIBus) => String(r.id)
 
-  const isServerUuid = (id: string) => /^[0-9a-fA-F-]{36}$/.test(id)
+  const isServerId = (id: string) => /^\d+$/.test(id)
 
   return (
     <div className="space-y-5">
@@ -369,34 +509,13 @@ export default function BusesPage() {
             </>
           )
         }}
-        onDeleteRow={async (b) => {
-          const prev = rows
-          setRows((r) => r.filter((x) => x.id !== b.id))
-          try {
-            if (isServerUuid(b.id)) await busApi.remove(b.id)
-            toast.success("Bus supprimé", { description: `Plaque : ${b.plate}` })
-          } catch (e) {
-            setRows(prev)
-            showValidationErrors(e)
-          }
-        }}
+        onDeleteRow={(b) => setBusToDelete(b)}
         getDeleteRowLabel={(b) => b.plate}
         groupBy={groupBy}
         pageSizeOptions={[10, 20, 50]}
         onRowClick={(b) => navigate(`/buses/${b.id}`)}
-        onDeleteSelected={async (selected) => {
-          if (selected.length === 0) return
-          const prev = rows
-          setRows((r) => r.filter((b) => !selected.some((s) => s.id === b.id)))
-          try {
-            await Promise.all(
-              selected.filter((s) => isServerUuid(s.id)).map((s) => busApi.remove(s.id))
-            )
-            toast.success(`${selected.length} bus supprimé(s).`)
-          } catch (e) {
-            setRows(prev)
-            showValidationErrors(e)
-          }
+        onDeleteSelected={(selected) => {
+          if (selected.length > 0) setBulkDeleteTargets(selected)
         }}
       />
 
@@ -432,6 +551,45 @@ export default function BusesPage() {
               setRows((r) => r.filter((x) => x.id !== tempId))
               showValidationErrors(e)
             }
+          }
+        }}
+      />
+
+      <DeleteBusDialog
+        bus={busToDelete}
+        onClose={() => setBusToDelete(null)}
+        onConfirm={async (b) => {
+          const prev = rows
+          setRows((r) => r.filter((x) => x.id !== b.id))
+          try {
+            if (isServerId(b.id)) await busApi.remove(b.id)
+            toast.success("Bus supprimé", { description: `Plaque : ${b.plate}` })
+            setBusToDelete(null)
+          } catch (e) {
+            setRows(prev)
+            showValidationErrors(e)
+          }
+        }}
+      />
+
+      <BulkDeleteDialog
+        targets={bulkDeleteTargets}
+        onClose={() => setBulkDeleteTargets(null)}
+        onConfirm={async (password) => {
+          const valid = await auth.verifyPassword(password)
+          if (!valid) throw new Error("Mot de passe incorrect.")
+          const selected = bulkDeleteTargets!
+          const prev = rows
+          setRows((r) => r.filter((b) => !selected.some((s) => s.id === b.id)))
+          try {
+            await Promise.all(
+              selected.filter((s) => isServerId(s.id)).map((s) => busApi.remove(s.id))
+            )
+            toast.success(`${selected.length} bus supprimé(s).`)
+            setBulkDeleteTargets(null)
+          } catch (e) {
+            setRows(prev)
+            throw e
           }
         }}
       />

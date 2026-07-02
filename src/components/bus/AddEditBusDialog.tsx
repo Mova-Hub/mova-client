@@ -32,17 +32,21 @@ import type { BusStatus, BusType } from "@/api/bus"
 import { cn } from "@/lib/utils"
 import useAuth from "@/hooks/useAuth"
 
-/** Options prédéfinies */
 const MODEL_OPTIONS = [
   "Toyota Coaster",
+  "Toyota Hiace",
   "Isuzu NQR",
   "Isuzu NPR",
   "Scania Touring",
   "Yutong ZK",
+  "Mercedes Sprinter",
 ] as const
 
-// Must match backend values
-const TYPE_OPTIONS: BusType[] = ["hiace", "coaster"]
+const TYPE_OPTIONS: BusType[] = ["hiace", "coaster", "sprinter", "minibus", "coach", "bus"]
+const ENERGY_OPTIONS = ["diesel", "gasoline", "electric", "hybrid", "lpg"] as const
+const ENERGY_LABELS: Record<string, string> = {
+  diesel: "Diesel", gasoline: "Essence", electric: "Électrique", hybrid: "Hybride", lpg: "GPL",
+}
 const PROVIDERS = ["AXA", "Jubilee", "Britam", "CIC", "APA"] as const
 
 type Id = Person["id"]
@@ -70,11 +74,15 @@ export default function AddEditBusDialog({
 
   // ------- État (Bus) -------
   const [plate, setPlate] = React.useState("")
+  const [brand, setBrand] = React.useState("")
   const [capacity, setCapacity] = React.useState<number>(49)
   const [status, setStatus] = React.useState<BusStatus>("active")
   const [type, setType] = React.useState<BusType>("hiace")
   const [model, setModel] = React.useState<string>(MODEL_OPTIONS[0])
   const [year, setYear] = React.useState<number | "">("")
+  const [energyType, setEnergyType] = React.useState<string>("")
+  const [firstRegistrationYear, setFirstRegistrationYear] = React.useState<number | "">("")
+  const [chassisNumber, setChassisNumber] = React.useState("")
   const [mileageKm, setMileageKm] = React.useState<number | "">("")
   const [operatorId, setOperatorId] = React.useState<Id | "">("")
   const [assignedDriverId, setAssignedDriverId] = React.useState<Id | "">("")
@@ -126,11 +134,15 @@ export default function AddEditBusDialog({
   React.useEffect(() => {
     if (editing) {
       setPlate(editing.plate ?? "")
+      setBrand(editing.brand ?? "")
       setCapacity(editing.capacity ?? 49)
       setStatus((editing.status as BusStatus) ?? "active")
       setType((editing.type as BusType) ?? "hiace")
       setModel(editing.model ?? MODEL_OPTIONS[0])
       setYear(editing.year ?? "")
+      setEnergyType(editing.energyType ?? "")
+      setFirstRegistrationYear(editing.firstRegistrationYear ?? "")
+      setChassisNumber(editing.chassisNumber ?? "")
       setMileageKm(editing.mileageKm ?? "")
       setOperatorId((editing.operatorId as Id | undefined) ?? "")
       setAssignedDriverId((editing.assignedDriverId as Id | undefined) ?? "")
@@ -146,11 +158,15 @@ export default function AddEditBusDialog({
       setInsValidUntil(editing.insuranceValidUntil ?? "")
     } else {
       setPlate("")
+      setBrand("")
       setCapacity(49)
       setStatus("active")
       setType("hiace")
       setModel(MODEL_OPTIONS[0])
       setYear("")
+      setEnergyType("")
+      setFirstRegistrationYear("")
+      setChassisNumber("")
       setMileageKm("")
       setOperatorId("")
       setAssignedDriverId("")
@@ -191,11 +207,15 @@ export default function AddEditBusDialog({
     const payload: Partial<UIBus> & { id?: string } = {
       ...(editing?.id ? { id: editing.id } : {}),
       plate: plate.trim(),
+      brand: brand.trim() || undefined,
       capacity: Number(capacity),
       status,
       type,
       model: model.trim() || undefined,
       year: year === "" ? undefined : Number(year),
+      energyType: energyType || undefined,
+      firstRegistrationYear: firstRegistrationYear === "" ? undefined : Number(firstRegistrationYear),
+      chassisNumber: chassisNumber.trim() || undefined,
       mileageKm: mileageKm === "" ? undefined : Number(mileageKm),
       operatorId: asStringOrUndefined(lockedOperatorId),
       assignedDriverId: asStringOrUndefined(lockedDriverId),
@@ -408,14 +428,14 @@ export default function AddEditBusDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] p-0 overflow-y-auto">
-        <DialogHeader className="px-6 pt-5 pb-2">
+      <DialogContent className="sm:max-w-2xl flex flex-col max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-6 pt-5 pb-2 shrink-0">
           <DialogTitle>{editing ? "Modifier un bus" : "Ajouter un bus"}</DialogTitle>
           <DialogDescription>Saisissez les informations du bus.</DialogDescription>
         </DialogHeader>
         <Separator />
-        <div className="overflow-y-auto px-6 py-4">
-          <form className="grid gap-6" onSubmit={submit}>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <form id="bus-form" className="grid gap-6" onSubmit={submit}>
             {/* --- Informations principales --- */}
             <div className="grid gap-4">
               <SectionTitle>Informations principales</SectionTitle>
@@ -428,6 +448,16 @@ export default function AddEditBusDialog({
                     onChange={(e) => setPlate(e.target.value.toUpperCase())}
                     placeholder="KDC 123A"
                     required
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="brand">Marque</Label>
+                  <Input
+                    id="brand"
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    placeholder="Toyota"
                   />
                 </div>
 
@@ -472,7 +502,7 @@ export default function AddEditBusDialog({
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="year">Année</Label>
+                  <Label htmlFor="year">Année de fabrication</Label>
                   <Input
                     id="year"
                     type="number"
@@ -481,6 +511,45 @@ export default function AddEditBusDialog({
                     value={year}
                     onChange={(e) => setYear(e.target.value === "" ? "" : Number(e.target.value))}
                     placeholder="2020"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="firstReg">1re mise en circulation</Label>
+                  <Input
+                    id="firstReg"
+                    type="number"
+                    min={1970}
+                    max={new Date().getFullYear() + 1}
+                    value={firstRegistrationYear}
+                    onChange={(e) => setFirstRegistrationYear(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="2021"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="energyType">Énergie</Label>
+                  <select
+                    id="energyType"
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    value={energyType}
+                    onChange={(e) => setEnergyType(e.target.value)}
+                  >
+                    <option value="">— Choisir —</option>
+                    {ENERGY_OPTIONS.map((e) => (
+                      <option key={e} value={e}>{ENERGY_LABELS[e]}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="chassisNumber">N° châssis</Label>
+                  <Input
+                    id="chassisNumber"
+                    value={chassisNumber}
+                    onChange={(e) => setChassisNumber(e.target.value)}
+                    placeholder="VF7XXXXXXXXXXXX"
+                    className="font-mono"
                   />
                 </div>
 
@@ -633,14 +702,16 @@ export default function AddEditBusDialog({
               )}
             </div>
 
-            {/* Actions */}
-            <div className="pt-1 flex items-center justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Annuler
-              </Button>
-              <Button type="submit">{editing ? "Enregistrer" : "Ajouter"}</Button>
-            </div>
           </form>
+        </div>
+        <Separator />
+        <div className="flex items-center justify-end gap-2 px-6 py-4 shrink-0 bg-background">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Annuler
+          </Button>
+          <Button type="submit" form="bus-form">
+            {editing ? "Enregistrer" : "Ajouter"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

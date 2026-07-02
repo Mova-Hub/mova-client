@@ -54,6 +54,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 import peopleApi, { type Person, type PersonRole } from "@/api/people"
 import { ApiError } from "@/api/apiService"
+import auth from "@/api/auth"
 
 /* -------------------------- Role normalization -------------------------- */
 
@@ -241,6 +242,130 @@ function AddEditPersonDialog({ open, onOpenChange, editing, onSubmit }: AddEditP
   )
 }
 
+/* ------------- Single-delete dialog (type person name) ------------- */
+
+function DeletePersonDialog({
+  person,
+  onClose,
+  onConfirm,
+}: {
+  person: Person | null
+  onClose: () => void
+  onConfirm: (p: Person) => Promise<void>
+}) {
+  const [input, setInput] = React.useState("")
+  const [deleting, setDeleting] = React.useState(false)
+
+  React.useEffect(() => { if (person) setInput("") }, [person])
+
+  const matches = input.trim().toLowerCase() === (person?.name ?? "").trim().toLowerCase()
+
+  async function handleConfirm() {
+    if (!person || !matches) return
+    setDeleting(true)
+    try { await onConfirm(person) } finally { setDeleting(false) }
+  }
+
+  return (
+    <AlertDialog open={!!person} onOpenChange={(open) => { if (!open && !deleting) onClose() }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Supprimer cette personne ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Saisissez{" "}
+            <span className="font-semibold text-foreground">{person?.name}</span>{" "}
+            pour confirmer la suppression.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="grid gap-1.5">
+          <Label>Nom</Label>
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={person?.name}
+            onKeyDown={(e) => e.key === "Enter" && matches && handleConfirm()}
+          />
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose} disabled={deleting}>Annuler</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!matches || deleting}
+            onClick={handleConfirm}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {deleting ? "Suppression…" : "Supprimer"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+/* ------------- Bulk-delete dialog (type password) ------------- */
+
+function BulkDeletePersonDialog({
+  targets,
+  onClose,
+  onConfirm,
+}: {
+  targets: Person[] | null
+  onClose: () => void
+  onConfirm: (password: string) => Promise<void>
+}) {
+  const [password, setPassword] = React.useState("")
+  const [error, setError] = React.useState("")
+  const [loading, setLoading] = React.useState(false)
+
+  React.useEffect(() => { if (targets) { setPassword(""); setError("") } }, [targets])
+
+  async function handleSubmit() {
+    if (!password) return
+    setError("")
+    setLoading(true)
+    try {
+      await onConfirm(password)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Mot de passe incorrect.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <AlertDialog open={!!targets} onOpenChange={(open) => { if (!open && !loading) onClose() }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Supprimer {targets?.length ?? 0} personne(s) ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Cette action est irréversible. Confirmez avec votre mot de passe.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="grid gap-1.5">
+          <Label>Mot de passe</Label>
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose} disabled={loading}>Annuler</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!password || loading}
+            onClick={handleSubmit}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {loading ? "Vérification…" : "Supprimer"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 /* ------------------------------- People page -------------------------------- */
 
 export default function PeoplePage() {
@@ -251,6 +376,7 @@ export default function PeoplePage() {
   const [editing, setEditing] = React.useState<Person | null>(null)
   const [openImport, setOpenImport] = React.useState(false)
   const [personToDelete, setPersonToDelete] = React.useState<Person | null>(null)
+  const [bulkDeleteTargets, setBulkDeleteTargets] = React.useState<Person[] | null>(null)
 
   const reload = React.useCallback(async () => {
     try {
@@ -413,23 +539,6 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
     ]
   }, [rows, isServerId]) // Add dependencies needed for the actions
 
-  async function confirmDeletePerson() {
-    if (!personToDelete) return
-    const p = personToDelete
-    setPersonToDelete(null)
-    const prev = rows
-    setRows((r) => r.filter((x) => x.id !== p.id))
-    try {
-      if (isServerId(p.id)) {
-        await peopleApi.remove(p.id)
-      }
-      toast("Personne supprimée.")
-    } catch (e) {
-      setRows(prev)
-      showValidationErrors(e)
-    }
-  }
-
   const groupBy: GroupByConfig<Person>[] = [
     {
       id: "role",
@@ -472,21 +581,8 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
         groupBy={groupBy}
         pageSizeOptions={[10, 20, 50]}
         onRowClick={(p) => navigate(`/people/${p.id}`)}
-        onDeleteSelected={async (selected) => {
-          if (selected.length === 0) return
-          const prev = rows
-          setRows((r) => r.filter((p) => !selected.some((s) => s.id === p.id)))
-          try {
-            await Promise.all(
-              selected
-                .filter(s => isServerId(s.id))
-                .map(s => peopleApi.remove(s.id))
-            )
-            toast(`${selected.length} personne(s) supprimée(s).`)
-          } catch (e) {
-            setRows(prev)
-            showValidationErrors(e)
-          }
+        onDeleteSelected={(selected) => {
+          if (selected.length > 0) setBulkDeleteTargets(selected)
         }}
       />
 
@@ -576,33 +672,44 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
         }}
       />
 
-      {/* Delete confirmation for individual row (custom actions column) */}
-      <AlertDialog
-        open={!!personToDelete}
-        onOpenChange={(open) => { if (!open) setPersonToDelete(null) }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {personToDelete
-                ? `Supprimer « ${personToDelete.name} » ?`
-                : "Supprimer cette personne ?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible et ne peut pas être annulée.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPersonToDelete(null)}>Annuler</AlertDialogCancel>
-            <AlertDialogAction
-              className="text-white bg-destructive hover:bg-destructive/90"
-              onClick={confirmDeletePerson}
-            >
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Single delete: confirm by typing the person's name */}
+      <DeletePersonDialog
+        person={personToDelete}
+        onClose={() => setPersonToDelete(null)}
+        onConfirm={async (p: Person) => {
+          setPersonToDelete(null)
+          const prev = rows
+          setRows((r) => r.filter((x) => x.id !== p.id))
+          try {
+            if (isServerId(p.id)) await peopleApi.remove(p.id)
+            toast("Personne supprimée.")
+          } catch (e) {
+            setRows(prev)
+            showValidationErrors(e)
+          }
+        }}
+      />
+
+      {/* Bulk delete: confirm with password */}
+      <BulkDeletePersonDialog
+        targets={bulkDeleteTargets}
+        onClose={() => setBulkDeleteTargets(null)}
+        onConfirm={async (password: string) => {
+          const valid = await auth.verifyPassword(password)
+          if (!valid) throw new Error("Mot de passe incorrect.")
+          const selected = bulkDeleteTargets!
+          const prev = rows
+          setRows((r) => r.filter((p) => !selected.some((s) => s.id === p.id)))
+          try {
+            await Promise.all(selected.filter((s) => isServerId(s.id)).map((s) => peopleApi.remove(s.id)))
+            toast(`${selected.length} personne(s) supprimée(s).`)
+            setBulkDeleteTargets(null)
+          } catch (e) {
+            setRows(prev)
+            throw e
+          }
+        }}
+      />
     </div>
   )
 }

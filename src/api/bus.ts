@@ -5,15 +5,50 @@ import api, { buildQuery } from "@/api/apiService"
 export type BusStatus = "active" | "maintenance" | "inactive"
 export type BusType = "sprinter" | "coach" | "minibus" | "hiace" | "coaster" | "bus" | "other"
 
+export type BusDocumentType = "carte_grise" | "assurance" | "visite_technique" | "permis" | "autre"
+
+export type BusDocument = {
+  id: number
+  busId: string
+  name: string
+  type?: BusDocumentType
+  fileUrl?: string
+  mimeType?: string
+  sizeKb?: number
+  expiresAt?: string
+  uploadedBy?: number
+  createdAt?: string
+}
+
+export type BusStats = {
+  total_reservations: number
+  total_distance_km: number
+  total_revenue: number
+  by_status: Record<string, number>
+  by_event: Record<string, number>
+  recent: {
+    id: string
+    code?: string
+    status?: string
+    trip_date?: string
+    price_total: number
+    passenger_name: string
+  }[]
+}
+
 export type BusDto = {
-  id: string // uuid
+  id: string // bigint cast to string by BusResource
   plate: string
+  brand?: string | null
   capacity: number
   name?: string | null
   type?: BusType | null
   status?: BusStatus | null
   model?: string | null
   year?: number | null
+  energy_type?: string | null
+  first_registration_year?: number | null
+  chassis_number?: string | null
   mileage_km?: number | null
   last_service_date?: string | null // YYYY-MM-DD
 
@@ -24,12 +59,12 @@ export type BusDto = {
   // UUID FKs (must match your migration)
   operator_id?: string | null
   assigned_driver_id?: string | null
-  assigned_conductor_id?: string | null 
+  assigned_conductor_id?: string | null
 
   // optional related snippets when `with=operator,driver,conductor`
-  operator?: { id: string; name: string } | null
-  driver?: { id: string; name: string } | null
-  conductor?: { id: string; name: string } | null 
+  operator?: { id: string; name: string; phone?: string } | null
+  driver?: { id: string; name: string; phone?: string } | null
+  conductor?: { id: string; name: string; phone?: string } | null
 
   created_at?: string | null
   updated_at?: string | null
@@ -51,12 +86,16 @@ export type Paginated<T> = {
 export type UIBus = {
   id: string
   plate: string
+  brand?: string
   capacity: number
   name?: string
   type?: BusType
   status?: BusStatus
   model?: string
   year?: number
+  energyType?: string
+  firstRegistrationYear?: number
+  chassisNumber?: string
   mileageKm?: number
   lastServiceDate?: string // YYYY-MM-DD
 
@@ -66,11 +105,11 @@ export type UIBus = {
 
   operatorId?: string | null
   assignedDriverId?: string | null
-  assignedConductorId?: string | null 
+  assignedConductorId?: string | null
 
   operatorName?: string | null
   driverName?: string | null
-  conductorName?: string | null 
+  conductorName?: string | null
 
   createdAt?: string
   updatedAt?: string
@@ -82,12 +121,16 @@ export function toUIBus(b: BusDto): UIBus {
   return {
     id: b.id,
     plate: b.plate,
+    brand: b.brand ?? undefined,
     capacity: Number(b.capacity ?? 0),
     name: b.name ?? undefined,
     type: (b.type ?? undefined) as BusType | undefined,
     status: (b.status ?? undefined) as BusStatus | undefined,
     model: b.model ?? undefined,
     year: (b.year ?? undefined) as number | undefined,
+    energyType: b.energy_type ?? undefined,
+    firstRegistrationYear: b.first_registration_year ?? undefined,
+    chassisNumber: b.chassis_number ?? undefined,
     mileageKm: b.mileage_km ?? undefined,
     lastServiceDate: b.last_service_date ?? undefined,
     insuranceProvider: b.insurance_provider ?? undefined,
@@ -101,6 +144,21 @@ export function toUIBus(b: BusDto): UIBus {
     conductorName: b.conductor?.name ?? undefined,
     createdAt: b.created_at ?? undefined,
     updatedAt: b.updated_at ?? undefined,
+  }
+}
+
+function toUIDocument(d: Record<string, any>): BusDocument {
+  return {
+    id: d.id,
+    busId: d.bus_id,
+    name: d.name,
+    type: d.type ?? undefined,
+    fileUrl: d.file_url ?? undefined,
+    mimeType: d.mime_type ?? undefined,
+    sizeKb: d.size_kb ?? undefined,
+    expiresAt: d.expires_at ?? undefined,
+    uploadedBy: d.uploaded_by ?? undefined,
+    createdAt: d.created_at ?? undefined,
   }
 }
 
@@ -151,6 +209,11 @@ function toPayload(body: PartialUIBus): Record<string, unknown> {
   }
 
   // UUIDs
+  if (body.brand !== undefined) p.brand = asStringOrNull(body.brand)
+  if (body.energyType !== undefined) p.energy_type = body.energyType || null
+  if (body.firstRegistrationYear !== undefined) p.first_registration_year = asNumberOrNull(body.firstRegistrationYear)
+  if (body.chassisNumber !== undefined) p.chassis_number = asStringOrNull(body.chassisNumber)
+
   if (body.operatorId !== undefined) p.operator_id = asStringOrNull(body.operatorId)
   if (body.assignedDriverId !== undefined) p.assigned_driver_id = asStringOrNull(body.assignedDriverId)
   if (body.assignedConductorId !== undefined) p.assigned_conductor_id = asStringOrNull(body.assignedConductorId)
@@ -258,6 +321,28 @@ async function bulkStatus(ids: string[], status: BusStatus) {
   return api.post<{ updated: number }, typeof body>(`/buses/bulk-status`, body)
 }
 
+async function bulkDestroy(ids: string[]) {
+  return api.post<{ deleted: number }, { ids: string[] }>(`/buses/bulk-destroy`, { ids })
+}
+
+async function fetchStats(id: string) {
+  return api.get<BusStats>(`/buses/${id}/stats`)
+}
+
+async function fetchDocuments(busId: string) {
+  const res = await api.get<Record<string, any>[]>(`/buses/${busId}/documents`)
+  return { ...res, data: (res.data ?? []).map(toUIDocument) }
+}
+
+async function uploadDocument(busId: string, formData: FormData) {
+  const res = await api.post<Record<string, any>, FormData>(`/buses/${busId}/documents`, formData)
+  return { ...res, data: toUIDocument(res.data) }
+}
+
+async function deleteDocument(busId: string, documentId: number) {
+  return api.delete<null>(`/buses/${busId}/documents/${documentId}`)
+}
+
 export default {
   list,
   get,
@@ -269,4 +354,9 @@ export default {
   assignConductor,
   setOperator,
   bulkStatus,
+  bulkDestroy,
+  fetchStats,
+  fetchDocuments,
+  uploadDocument,
+  deleteDocument,
 }
