@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import { IconPencil, IconPower } from "@tabler/icons-react"
 import { toast } from "sonner"
 
@@ -111,6 +112,7 @@ function normalizeBusRelations(raw: any): UIBus {
 }
 
 export default function BusesPage() {
+  const navigate = useNavigate()
   const [rows, setRows] = React.useState<UIBus[]>([])
   const [loading, setLoading] = React.useState<boolean>(true)
   const [open, setOpen] = React.useState(false)
@@ -381,41 +383,7 @@ export default function BusesPage() {
         getDeleteRowLabel={(b) => b.plate}
         groupBy={groupBy}
         pageSizeOptions={[10, 20, 50]}
-        renderRowDetailTitle={(b) => b.plate}
-        renderRowDetail={(b) => (
-          <div className="grid gap-2 text-sm">
-            <div>
-              <span className="text-muted-foreground">Capacité :</span> {b.capacity}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Propriétaire :</span>{" "}
-              {getPersonName(b.operatorId, b.operatorName)}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Chauffeur :</span>{" "}
-              {getPersonName(b.assignedDriverId, b.driverName)}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Receveur :</span>{" "}
-              {getPersonName(b.assignedConductorId, b.conductorName)}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Type :</span> {prettyType(b.type)}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Modèle :</span> {b.model ?? "—"}
-            </div>
-            <div>
-              <span className="text-muted-foreground">Année :</span> {b.year ?? "—"}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Statut :</span>
-              <Badge variant="outline" className="px-1.5 capitalize">
-                {frBusStatus(b.status)}
-              </Badge>
-            </div>
-          </div>
-        )}
+        onRowClick={(b) => navigate(`/buses/${b.id}`)}
         onDeleteSelected={async (selected) => {
           if (selected.length === 0) return
           const prev = rows

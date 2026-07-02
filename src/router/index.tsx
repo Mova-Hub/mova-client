@@ -14,11 +14,17 @@ import JobsPage from "@/app/pages/Jobs"
 
 const Overview = React.lazy(() => import("@/app/pages/Overview"))
 const Reservations = React.lazy(() => import("@/app/pages/Reservations"))
+const ReservationDetailPage = React.lazy(() => import("@/app/pages/reservations/ReservationDetailPage"))
 const Clients = React.lazy(() => import("@/app/pages/Clients"))
+const ClientDetailPage = React.lazy(() => import("@/app/pages/clients/ClientDetailPage"))
 const Orders = React.lazy(() => import("@/app/pages/Orders"))
 const Buses = React.lazy(() => import("@/app/pages/Buses"))
+const BusDetailPage = React.lazy(() => import("@/app/pages/buses/BusDetailPage"))
 const People = React.lazy(() => import("@/app/pages/People"))
+const PersonDetailPage = React.lazy(() => import("@/app/pages/people/PersonDetailPage"))
 const Staff = React.lazy(() => import("@/app/pages/Staff"))
+const StaffDetailPage = React.lazy(() => import("@/app/pages/staff/StaffDetailPage"))
+const JobDetailPage = React.lazy(() => import("@/app/pages/jobs/JobDetailPage"))
 const Notifications = React.lazy(() => import("@/app/pages/Notifications"))
 const Settings = React.lazy(() => import("@/app/pages/Settings"))
 const MyAccount = React.lazy(() => import("@/app/pages/MyAccount"))
@@ -86,9 +92,12 @@ export const router = createBrowserRouter([
               { index: true, element: <LandingRedirect /> },
 
               { path: "clients", element: withSuspense(<Clients />) },
+              { path: "clients/:id", element: withSuspense(<ClientDetailPage />) },
               { path: "orders", element: withSuspense(<Orders />) },
               { path: "reservations", element: withSuspense(<Reservations />) },
+              { path: "reservations/:id", element: withSuspense(<ReservationDetailPage />) },
               { path: "buses", element: withSuspense(<Buses />) },
+              { path: "buses/:id", element: withSuspense(<BusDetailPage />) },
               { path: "notifications", element: withSuspense(<Notifications />) },
               { path: "account", element: withSuspense(<MyAccount />) },
 
@@ -98,8 +107,11 @@ export const router = createBrowserRouter([
                 children: [
                   { path: "overview", element: withSuspense(<Overview />) },
                   { path: "people", element: withSuspense(<People />) },
+                  { path: "people/:id", element: withSuspense(<PersonDetailPage />) },
                   { path: "staff", element: withSuspense(<Staff />) },
+                  { path: "staff/:id", element: withSuspense(<StaffDetailPage />) },
                   { path: "jobs", element: withSuspense(<JobsPage />) },
+                  { path: "jobs/:id", element: withSuspense(<JobDetailPage />) },
                   // { path: "settings", element: withSuspense(<Settings />) },
                 ],
               },

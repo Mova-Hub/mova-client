@@ -2,7 +2,8 @@
 "use client"
 
 import * as React from "react"
-import { IconEye, IconPhone, IconMail } from "@tabler/icons-react"
+import { useNavigate } from "react-router-dom"
+import { IconEye } from "@tabler/icons-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
@@ -25,6 +26,7 @@ function showValidationErrors(err: unknown) {
 }
 
 export default function ClientsPage() {
+  const navigate = useNavigate()
   const [rows, setRows] = React.useState<Client[]>([])
   const [loading, setLoading] = React.useState<boolean>(true)
   const [total, setTotal] = React.useState(0)
@@ -184,28 +186,7 @@ export default function ClientsPage() {
         filters={filters}
         groupBy={groupBy}
         renderRowActions={renderRowActions}
-        renderRowDetailTitle={(c) => c.name}
-        renderRowDetail={(c) => (
-          <div className="space-y-4">
-            <div className="grid gap-2 text-sm">
-              <div className="flex items-center gap-2">
-                <IconPhone className="h-4 w-4 text-muted-foreground" />
-                <span>{c.phone}</span>
-              </div>
-              {c.email && (
-                <div className="flex items-center gap-2">
-                  <IconMail className="h-4 w-4 text-muted-foreground" />
-                  <span>{c.email}</span>
-                </div>
-              )}
-            </div>
-            <div className="rounded-md bg-muted p-3 text-sm">
-              <p className="font-medium">Statistiques</p>
-              <p>Commandes passées : {c.ordersCount}</p>
-              <p>Inscrit le : {c.createdAt ? new Date(c.createdAt).toLocaleDateString("fr-FR") : "—"}</p>
-            </div>
-          </div>
-        )}
+        onRowClick={(c) => navigate(`/clients/${c.id}`)}
       />
 
       {/* Client Details Dialog Component */}

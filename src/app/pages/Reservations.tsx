@@ -30,7 +30,7 @@ import { PaymentDialog } from "@/components/reservation/PaymentDialog"
 import reservationApi, { type UIReservation, type ReservationStatus, type ReservationPaymentStatus } from "@/api/reservation"
 import busApi, { type UIBus } from "@/api/bus"
 import { Button } from "@/components/ui/button"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { MapIcon } from "lucide-react"
 
 /* ------------------------------- i18n helpers ------------------------------ */
@@ -117,11 +117,6 @@ const dateHeaderLabel = (iso?: string) => {
   return d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
 }
 
-const shortDatetime = (iso?: string) => {
-  const d = parseSmartDate(iso)
-  if (!d) return "—"
-  return new Intl.DateTimeFormat("fr-FR", { dateStyle: "medium", timeStyle: "short" }).format(d)
-}
 
 /* ------------------------------- update helpers ------------------------------ */
 
@@ -150,6 +145,7 @@ function serializeReservationForUpdate(r: UIReservation): Partial<UIReservation>
 /* --------------------------------- Page ----------------------------------- */
 
 export default function ReservationPage() {
+  const navigate = useNavigate()
   const [rows, setRows] = React.useState<UIReservation[]>([])
   const [open, setOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<UIReservation | null>(null)
@@ -272,7 +268,9 @@ export default function ReservationPage() {
     {
       accessorKey: "code",
       header: "Code",
-      cell: ({ row }) => <span className="font-medium font-mono">{row.original.code}</span>,
+      cell: ({ row }) => (
+        <span className="font-mono font-semibold text-sm">{row.original.code}</span>
+      ),
     },
 
     { id: "tripDate", header: "Date", cell: ({ row }) => friendlyDateTime(row.original.tripDate) },
@@ -419,7 +417,7 @@ export default function ReservationPage() {
           <p className="text-sm text-muted-foreground">Suivez les réservations, paiements et voyages planifiés.</p>
         </div>
         <Button asChild variant="outline">
-          <Link to="/map/reservations"><MapIcon className="mr-2 h-4 w-4" />Vue carte</Link>
+          <Link to="/map/reservations"><MapIcon className="w-4 h-4 mr-2" />Vue carte</Link>
         </Button>
       </div>
 
@@ -434,55 +432,11 @@ export default function ReservationPage() {
         addLabel="Ajouter"
         onImport={() => setOpenImport(true)}
         importLabel="Importer"
+        onRowClick={(r) => navigate(`/reservations/${r.id}`)}
         renderRowActions={renderRowActions}
         groupBy={groupBy}
+        initialView="list"
         pageSizeOptions={[10, 20, 50]}
-        renderRowDetailTitle={(r) => r.code}
-        renderRowDetail={(r) => {
-          const busPlates = (r.busIds ?? []).map((id) => busPlateById.get(String(id)) ?? String(id))
-          const dist = r.distanceKm
-          return (
-            <div className="grid gap-2 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">Statut :</span>
-                <Badge variant="outline" className="px-1.5 capitalize">{frStatus(r.status)}</Badge>
-              </div>
-              {!!r.event && (
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">Événement :</span>
-                  <Badge variant="outline" className="px-1.5">{frEvent(r.event)}</Badge>
-                </div>
-              )}
-              <div className="grid gap-1">
-                <span className="text-muted-foreground">Passager</span>
-                <div>Nom : {r.passenger?.name ?? "—"}</div>
-                <div>Tél. : {r.passenger?.phone ?? "—"}</div>
-                <div>Email : {r.passenger?.email ?? "—"}</div>
-              </div>
-              <div className="grid gap-1">
-                <span className="text-muted-foreground">Trajet</span>
-                <div>{r.route?.from ?? "—"} → {r.route?.to ?? "—"}</div>
-                <div>Date : {friendlyDateTime(r.tripDate)}</div>
-                {!!dist && <div>Distance : {dist.toLocaleString("fr-FR")} km</div>}
-              </div>
-              <div className="grid gap-1">
-                <div>Sièges : {r.seats ?? "—"}</div>
-                <div>Total : {fmtMoney(r.priceTotal)}</div>
-                <div>Bus : {busPlates.length ? busPlates.join(", ") : "—"}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">Paiement :</span>
-                <Badge variant="outline" className={
-                  r.paymentStatus === "paid" ? "border-emerald-500 text-emerald-600 bg-emerald-50" :
-                  r.paymentStatus === "failed" ? "border-red-500 text-red-600 bg-red-50" : ""
-                }>
-                  {frPayment(r.paymentStatus)}
-                </Badge>
-              </div>
-              <div className="text-xs text-muted-foreground">Créée le {shortDatetime(r.createdAt)}</div>
-            </div>
-          )
-        }}
         onDeleteSelected={async (selected) => {
           if (selected.length === 0) return
           const prev = rows

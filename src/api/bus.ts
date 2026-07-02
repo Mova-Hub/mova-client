@@ -247,6 +247,12 @@ async function setOperator(id: string, userId: string | null) {
   return { ...res, data: toUIBus(res.data) }
 }
 
+async function get(id: string, withRelations?: ("operator" | "driver" | "conductor")[]) {
+  const qs = withRelations?.length ? buildQuery({ with: withRelations.join(",") }) : ""
+  const res = await api.get<BusDto>(`/buses/${id}${qs}`)
+  return { ...res, data: toUIBus(res.data) }
+}
+
 async function bulkStatus(ids: string[], status: BusStatus) {
   const body = { ids, status }
   return api.post<{ updated: number }, typeof body>(`/buses/bulk-status`, body)
@@ -254,6 +260,7 @@ async function bulkStatus(ids: string[], status: BusStatus) {
 
 export default {
   list,
+  get,
   create,
   update,
   remove,

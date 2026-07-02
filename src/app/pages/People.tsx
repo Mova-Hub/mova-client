@@ -2,11 +2,12 @@
 "use client"
 
 import * as React from "react"
-import { 
-  IconPencil, 
-  IconTrash, 
-  IconPhone,        // NEW
-  IconDotsVertical  // NEW
+import { useNavigate } from "react-router-dom"
+import {
+  IconPencil,
+  IconTrash,
+  IconPhone,
+  IconDotsVertical,
 } from "@tabler/icons-react"
 
 
@@ -147,7 +148,7 @@ function AddEditPersonDialog({ open, onOpenChange, editing, onSubmit }: AddEditP
       role,
       name: String(form.name ?? "").trim(),
       phone: form.phone ? String(form.phone).trim() : undefined,
-      email: form.email ? String(form.email).trim() : undefined,
+      // email: form.email ? String(form.email).trim() : undefined,
       licenseNo: role === "driver" ? (form.licenseNo ? String(form.licenseNo).trim() : undefined) : undefined,
       createdAt: editing?.createdAt ?? undefined,
       status: (form.status as Person["status"]) ?? editing?.status ?? "active",
@@ -181,10 +182,10 @@ function AddEditPersonDialog({ open, onOpenChange, editing, onSubmit }: AddEditP
             <Label>Téléphone (optionnel)</Label>
             <Input value={form.phone ?? ""} onChange={(e) => set("phone", e.target.value as any)} />
           </div>
-          <div className="grid gap-1.5">
+          {/* <div className="grid gap-1.5">
             <Label>Email (optionnel)</Label>
             <Input value={form.email ?? ""} onChange={(e) => set("email", e.target.value as any)} />
-          </div>
+          </div> */}
           <div className="grid gap-1.5">
             <Label>Rôle</Label>
             <Select
@@ -243,6 +244,7 @@ function AddEditPersonDialog({ open, onOpenChange, editing, onSubmit }: AddEditP
 /* ------------------------------- People page -------------------------------- */
 
 export default function PeoplePage() {
+  const navigate = useNavigate()
   const [rows, setRows] = React.useState<Person[]>([])
   const [loading, setLoading] = React.useState<boolean>(true)
   const [open, setOpen] = React.useState(false)
@@ -278,8 +280,8 @@ export default function PeoplePage() {
   }, [reload])
 
   const searchable = {
-    placeholder: "Rechercher nom, téléphone, email…",
-    fields: ["name", "phone", "email", "licenseNo"] as (keyof Person)[],
+    placeholder: "Rechercher nom, téléphone, permis…",
+    fields: ["name", "phone", "licenseNo"] as (keyof Person)[],
   }
 
   const filters: FilterConfig<Person>[] = [
@@ -339,14 +341,14 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
         header: "Téléphone",
         cell: ({ row }) => row.original.phone ?? "—",
       },
-      {
-        accessorKey: "email",
-        header: "Email",
-        cell: ({ row }) => (
-          <span className="block max-w-[200px] truncate">{row.original.email ?? "—"}</span>
-        ),
-        enableSorting: false,
-      },
+      // {
+      //   accessorKey: "email",
+      //   header: "Email",
+      //   cell: ({ row }) => (
+      //     <span className="block max-w-[200px] truncate">{row.original.email ?? "—"}</span>
+      //   ),
+      //   enableSorting: false,
+      // },
       {
         accessorKey: "licenseNo",
         header: "N° Permis",
@@ -370,11 +372,11 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
+                  className="w-8 h-8 text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50"
                   onClick={() => window.location.href = `tel:${p.phone}`}
                   title={`Appeler ${p.phone}`}
                 >
-                  <IconPhone className="h-4 w-4" />
+                  <IconPhone className="w-4 h-4" />
                 </Button>
               ) : (
                 <div className="w-8" /> /* Spacer if no phone */
@@ -383,14 +385,14 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
               {/* 2. Three Dots Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                    <IconDotsVertical className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground">
+                    <IconDotsVertical className="w-4 h-4" />
                     <span className="sr-only">Menu</span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => { setEditing(p); setOpen(true) }}>
-                    <IconPencil className="mr-2 h-4 w-4" /> Modifier
+                    <IconPencil className="w-4 h-4 mr-2" /> Modifier
                   </DropdownMenuItem>
 
                   <DropdownMenuSeparator />
@@ -399,7 +401,7 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
                     className="text-rose-600 focus:text-rose-600 focus:bg-rose-50"
                     onClick={() => setPersonToDelete(p)}
                   >
-                    <IconTrash className="mr-2 h-4 w-4" /> Supprimer
+                    <IconTrash className="w-4 h-4 mr-2" /> Supprimer
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -469,26 +471,7 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
         importLabel="Importer"
         groupBy={groupBy}
         pageSizeOptions={[10, 20, 50]}
-        renderRowDetailTitle={(p) => p.name}
-        renderRowDetail={(p) => (
-          <div className="grid gap-2 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Rôle :</span>
-              <Badge variant="outline" className="px-1.5 capitalize">
-                {frRole(normalizeRole(p.role) ?? (p.role as PersonRole))}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Statut :</span>
-              <Badge variant="outline" className="px-1.5">{frStatus(p.status)}</Badge>
-            </div>
-            <div><span className="text-muted-foreground">Téléphone :</span> {p.phone ?? "—"}</div>
-            <div><span className="text-muted-foreground">Email :</span> {p.email ?? "—"}</div>
-            {p.licenseNo && (
-              <div><span className="text-muted-foreground">N° Permis :</span> {p.licenseNo}</div>
-            )}
-          </div>
-        )}
+        onRowClick={(p) => navigate(`/people/${p.id}`)}
         onDeleteSelected={async (selected) => {
           if (selected.length === 0) return
           const prev = rows
@@ -549,10 +532,10 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
           { key: "name", label: "Nom", required: true },
           { key: "role", label: "Rôle", required: true },
           { key: "phone", label: "Téléphone" },
-          { key: "email", label: "Email" },
+          // { key: "email", label: "Email" },
           { key: "licenseNo", label: "N° de permis (chauffeurs)" },
         ]}
-        sampleHeaders={["name", "role", "phone", "email", "license_no"]}
+        sampleHeaders={["name", "role", "phone", "license_no"]}
         transform={(raw) => {
           const norm = (v: string | null | undefined) => (typeof v === "string" ? v.trim() : v)
 
@@ -564,7 +547,7 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
           const role = normalizeRole(rawRole) ?? "driver"
 
           const phone = (norm(raw.phone) ?? undefined) as string | undefined
-          const email = (norm(raw.email) ?? undefined) as string | undefined
+          // const email = (norm(raw.email) ?? undefined) as string | undefined
           const licenseNoSrc = ((norm((raw as any).license_no) ?? norm((raw as any).licenseNo)) ?? undefined) as string | undefined
 
           const person: Person = {
@@ -572,7 +555,7 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
             role,
             name,
             phone,
-            email,
+            // email,
             licenseNo: role === "driver" ? licenseNoSrc : undefined,
             createdAt: undefined,
             status: "active",
@@ -612,7 +595,7 @@ const columns = React.useMemo<ColumnDef<Person>[]>(() => {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setPersonToDelete(null)}>Annuler</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className="text-white bg-destructive hover:bg-destructive/90"
               onClick={confirmDeletePerson}
             >
               Supprimer

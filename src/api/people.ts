@@ -103,6 +103,11 @@ async function list(params?: ListParams) {
   }
 }
 
+async function get(id: string | number) {
+  const res = await api.get<PersonDto>(`/person/${id}`)
+  return { ...res, data: toPerson(res.data) }
+}
+
 async function create(payload: Partial<Person & { password?: string }>) {
   const res = await api.post<PersonDto, Record<string, unknown>>(`/person`, toPayload(payload))
   return { ...res, data: toPerson(res.data) }
@@ -128,4 +133,4 @@ async function setRole(id: string | number, role: PersonRole) {
   return { ...res, data: toPerson(res.data) }
 }
 
-export default { list, create, update, remove, bulkStatus, setRole }
+export default { list, get, create, update, remove, bulkStatus, setRole }

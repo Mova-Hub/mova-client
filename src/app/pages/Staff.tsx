@@ -2,6 +2,7 @@
 "use client"
 
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import { IconPencil } from "@tabler/icons-react"
 import { toast } from "sonner"
 
@@ -144,6 +145,7 @@ function AddEditStaffDialog({ open, onOpenChange, editing, onSubmit }: AddEditSt
 /* --------------------------------- Page ----------------------------------- */
 
 export default function StaffPage() {
+  const navigate = useNavigate()
   const [rows, setRows] = React.useState<Staff[]>([])
   const [loading, setLoading] = React.useState<boolean>(true)
   const [open, setOpen] = React.useState(false)
@@ -275,17 +277,7 @@ export default function StaffPage() {
         getDeleteRowLabel={(s) => s.name}
         groupBy={groupBy}
         pageSizeOptions={[10, 20, 50]}
-        renderRowDetailTitle={(s) => s.name}
-        renderRowDetail={(s) => (
-          <div className="grid gap-2 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">Rôle :</span>
-              <Badge variant="outline" className="px-1.5 capitalize">{s.role}</Badge>
-            </div>
-            <div><span className="text-muted-foreground">Téléphone :</span> {s.phone ?? "—"}</div>
-            <div><span className="text-muted-foreground">Email :</span> {s.email ?? "—"}</div>
-          </div>
-        )}
+        onRowClick={(s) => navigate(`/staff/${s.id}`)}
         onDeleteSelected={async (selected) => {
           if (selected.length === 0) return
           const prev = rows

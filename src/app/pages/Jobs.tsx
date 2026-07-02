@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import { IconPencil, IconBriefcase } from "@tabler/icons-react"
 import { toast } from "sonner"
 
@@ -19,7 +20,6 @@ import jobApi, {
 import { ApiError } from "@/api/apiService"
 import AddEditJobDialog from "@/components/jobs/AddEditJobDialog"
 import { CandidatesTab } from "@/components/jobs/CandidatesTab"
-
 function showValidationErrors(err: unknown) {
   const e = err as ApiError
   if (e?.payload?.errors) {
@@ -33,6 +33,7 @@ function showValidationErrors(err: unknown) {
 }
 
 export default function JobsPage() {
+  const navigate = useNavigate()
   const [rows, setRows] = React.useState<Job[]>([])
   const [loading, setLoading] = React.useState<boolean>(true)
   const [open, setOpen] = React.useState(false)
@@ -165,29 +166,7 @@ export default function JobsPage() {
             onDeleteRow={handleDeleteRow}
             getDeleteRowLabel={(j) => j.title}
             groupBy={[ { id: "department", label: "Département", accessor: (j) => getLabel(allDepts, j.department) } ]}
-            renderRowDetailTitle={(j) => (
-              <div className="flex flex-col gap-1">
-                <span className="text-xl font-bold">{j.title}</span>
-                <span className="text-sm font-normal text-muted-foreground">
-                  {getLabel(allDepts, j.department)} — {getLabel(allLocs, j.location)}, {getLabel(allCountries, j.country)}
-                </span>
-              </div>
-            )}
-            renderRowDetail={(j) => (
-              <div className="grid gap-6 text-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="px-2">{getLabel(WORK_MODES, j.workMode)}</Badge>
-                  <Badge variant="secondary" className="px-2">{getLabel(CONTRACT_TYPES, j.contractType)}</Badge>
-                  <Badge variant="outline" className={`px-2 ${statusColors[j.status]}`}>
-                    {getLabel(JOB_STATUSES, j.status)}
-                  </Badge>
-                </div>
-                <div><h4 className="pb-1 mb-1 font-semibold border-b">Le Poste</h4><p className="leading-relaxed text-muted-foreground">{j.shortDesc || "—"}</p></div>
-                <div><h4 className="pb-1 mb-2 font-semibold border-b">Responsabilités</h4><ul className="pl-5 space-y-1 list-disc text-muted-foreground">{j.responsibilities?.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
-                <div><h4 className="pb-1 mb-2 font-semibold border-b">Profil Recherché</h4><ul className="pl-5 space-y-1 list-disc text-muted-foreground">{j.requirements?.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
-                <div><h4 className="pb-1 mb-2 font-semibold border-b">Avantages</h4><ul className="pl-5 space-y-1 list-disc text-muted-foreground">{j.benefits?.map((r, i) => <li key={i}>{r}</li>)}</ul></div>
-              </div>
-            )}
+            onRowClick={(j) => navigate(`/jobs/${j.id}`)}
           />
         </TabsContent>
 

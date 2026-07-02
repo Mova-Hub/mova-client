@@ -12,7 +12,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Shield, UploadCloud, CheckCircle2, UserRound } from "lucide-react"
@@ -55,17 +54,15 @@ const securitySchema = z.object({
 
 type MeShape = {
   id?: string
-  firstName?: string
-  lastName?: string
-  name?: string // fallback if your API uses "name"
+  name?: string
   email?: string
   phone?: string
   role?: string
+  two_fa_enabled?: boolean
+  // Legacy fields
+  firstName?: string
+  lastName?: string
   avatarUrl?: string
-  // Optionally include prefs/notifications/twoFA if your /auth/me returns them
-  prefs?: Partial<z.infer<typeof prefsSchema>>
-  notifications?: Partial<z.infer<typeof notifSchema>>
-  security?: { twoFA?: boolean }
 }
 
 /* ------------------------------ Component ----------------------------- */

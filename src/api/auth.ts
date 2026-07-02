@@ -204,15 +204,18 @@ const auth = {
   /** Change password. */
   async changePassword(
     body: ChangePasswordBody,
-    path: "/me/change-password" | "/auth/password" = "/me/change-password"
+    path: "/me/change-password" | "/auth/password" | "/auth/change-password" = "/me/change-password"
   ) {
-    return await apiService.post(path, body)
+    return await apiService.post(path, {
+      current_password: body.currentPassword,
+      new_password: body.newPassword,
+    })
   },
 
   /** 2FA toggle. */
   async setTwoFA(
     body: TwoFAPayload,
-    path: "/me/2fa" | "/auth/2fa" = "/me/2fa"
+    path: "/me/2fa" | "/auth/2fa" | "/auth/toggle-2fa" = "/me/2fa"
   ) {
     return await putOrPatch(path, body)
   },

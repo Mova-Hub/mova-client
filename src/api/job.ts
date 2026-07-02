@@ -159,6 +159,11 @@ async function list(params?: ListParams) {
   }
 }
 
+async function get(id: string) {
+  const res = await api.get<JobDto>(`/jobs/${id}`)
+  return { ...res, data: toJob(res.data) }
+}
+
 async function create(payload: Partial<Job>) {
   const res = await api.post<JobDto, Record<string, unknown>>(`/jobs`, toPayload(payload))
   return { ...res, data: toJob(res.data) }
@@ -274,7 +279,7 @@ async function bulkCandidateStatus(ids: Array<string>, status: CandidateStatus) 
   return api.post<{ updated: number }, typeof body>(`/candidates/bulk-status`, body)
 }
 
-export default { 
-  list, create, update, remove, bulkStatus,
-  listCandidates, updateCandidate, removeCandidate, bulkCandidateStatus 
+export default {
+  list, get, create, update, remove, bulkStatus,
+  listCandidates, updateCandidate, removeCandidate, bulkCandidateStatus
 }
