@@ -89,16 +89,17 @@ async function doFetch<TRes>(
     Accept: "application/json",
   };
 
-  // Only set JSON content-type if we actually send a body (GET/DELETE normally don't)
   const withBody = body !== undefined && body !== null;
-  if (withBody) headers["Content-Type"] = "application/json";
+  const isFormData = withBody && body instanceof FormData;
+  // Let the browser set Content-Type (with boundary) for FormData; set JSON otherwise
+  if (withBody && !isFormData) headers["Content-Type"] = "application/json";
 
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers,
-    body: withBody ? JSON.stringify(body) : undefined,
+    body: withBody ? (isFormData ? (body as FormData) : JSON.stringify(body)) : undefined,
     // credentials: "omit", // token is in Authorization header
   });
 
