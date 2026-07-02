@@ -173,7 +173,7 @@ function ReservationsTab({ person }: { person: Person }) {
     {
       id: "passenger",
       header: "Passager",
-      cell: ({ row }) => row.original.passengerName ?? "—",
+      cell: ({ row }) => row.original.passenger?.name ?? "—",
     },
     {
       accessorKey: "tripDate",
@@ -185,9 +185,9 @@ function ReservationsTab({ person }: { person: Person }) {
       header: "Itinéraire",
       cell: ({ row }) => (
         <span className="text-sm">
-          {row.original.fromLocation}
+          {row.original.route?.from}
           <span className="mx-1 text-muted-foreground">→</span>
-          {row.original.toLocation}
+          {row.original.route?.to}
         </span>
       ),
     },
