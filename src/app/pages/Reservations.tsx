@@ -435,7 +435,6 @@ export default function ReservationPage() {
         onRowClick={(r) => navigate(`/reservations/${r.id}`)}
         renderRowActions={renderRowActions}
         groupBy={groupBy}
-        initialView="list"
         pageSizeOptions={[10, 20, 50]}
         onDeleteSelected={async (selected) => {
           if (selected.length === 0) return
