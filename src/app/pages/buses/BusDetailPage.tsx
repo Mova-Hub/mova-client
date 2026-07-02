@@ -952,15 +952,8 @@ export default function BusDetailPage() {
   const isActive = bus.status === "active"
   const owner = people.find((p) => String(p.id) === String(bus.operatorId)) ?? null
 
-  const tabs = [
-    { value: "informations", label: "Informations" },
-    { value: "equipage",     label: "Équipage" },
-    { value: "documents",    label: "Documents" },
-    { value: "reservations", label: "Réservations" },
-  ]
-
   return (
-    <div className="flex flex-col gap-6 p-6 lg:p-8 w-full max-w-7xl mx-auto">
+    <div className="flex flex-col gap-6 p-6 lg:p-8 w-full">
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1050,17 +1043,12 @@ export default function BusDetailPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="informations" className="flex flex-col gap-6">
-        <TabsList className="h-auto w-full justify-start gap-1 rounded-none border-b bg-transparent p-0">
-          {tabs.map((tab) => (
-            <TabsTrigger
-              key={tab.value}
-              value={tab.value}
-              className="rounded-none border-b-2 border-b-transparent px-3 pb-3 pt-2 font-medium text-muted-foreground shadow-none data-[state=active]:border-b-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground"
-            >
-              {tab.label}
-            </TabsTrigger>
-          ))}
+      <Tabs defaultValue="informations" className="w-full">
+        <TabsList className="mb-2">
+          <TabsTrigger value="informations">Informations</TabsTrigger>
+          <TabsTrigger value="equipage">Équipage</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="reservations">Réservations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="informations" className="mt-0 outline-none">
