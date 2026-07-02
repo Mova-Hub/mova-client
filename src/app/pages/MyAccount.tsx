@@ -68,6 +68,8 @@ type MeShape = {
 /* ------------------------------ Component ----------------------------- */
 export default function MyAccount() {
   const [loading, setLoading] = React.useState(true)
+  const [savingProfile, setSavingProfile] = React.useState(false)
+  const [savingSecurity, setSavingSecurity] = React.useState(false)
   const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null)
 
   const profileForm = useForm<z.infer<typeof profileSchema>>({
@@ -162,8 +164,8 @@ export default function MyAccount() {
             smsCancellation: !!user.notifications.smsCancellation,
           })
         }
-        if (typeof user?.security?.twoFA === "boolean") {
-          securityForm.setValue("twoFA", !!user.security.twoFA)
+        if (typeof user?.two_fa_enabled === "boolean") {
+          securityForm.setValue("twoFA", user.two_fa_enabled)
         }
       } catch (e: any) {
         toast.error(e?.message ?? "Impossible de charger votre compte.")
@@ -180,17 +182,14 @@ export default function MyAccount() {
   /* ------------------------------ Handlers ------------------------------ */
   const onSaveProfile = async (v: z.infer<typeof profileSchema>) => {
     try {
-      await auth.updateProfile({
-        firstName: v.firstName,
-        lastName: v.lastName,
-        email: v.email,
-        phone: v.phone || null,
-        role: v.role || null,
-        avatarUrl: v.avatarUrl || avatarPreview || null,
-      })
+      setSavingProfile(true)
+      const name = [v.firstName, v.lastName].filter(Boolean).join(" ").trim()
+      await auth.updateProfile({ name, email: v.email, phone: v.phone || null }, "/auth/me")
       toast.success("Profil mis à jour")
     } catch (e: any) {
       toast.error(e?.message ?? "Échec de la mise à jour du profil.")
+    } finally {
+      setSavingProfile(false)
     }
   }
 
@@ -212,31 +211,32 @@ export default function MyAccount() {
     }
   }
 
-  const onSaveSecurity = async (v: z.infer<typeof securitySchema>) => {
+  const onChangePassword = async (v: z.infer<typeof securitySchema>) => {
+    if (!v.newPassword) return toast.error("Saisissez un nouveau mot de passe.")
+    if (v.newPassword !== v.confirmPassword) return toast.error("La confirmation ne correspond pas.")
     try {
-      if ((v.newPassword || v.confirmPassword) && v.newPassword !== v.confirmPassword) {
-        toast.error("La confirmation du mot de passe ne correspond pas")
-        return
-      }
-      if (v.newPassword) {
-        await auth.changePassword({
-          currentPassword: v.currentPassword ?? "",
-          newPassword: v.newPassword ?? "",
-        })
-      }
-      // Persist 2FA toggle if supported
-      if (typeof v.twoFA === "boolean") {
-        await auth.setTwoFA({ enabled: v.twoFA })
-      }
-      toast.success("Sécurité mise à jour")
-      securityForm.reset({
-        ...securityForm.getValues(),
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      })
+      setSavingSecurity(true)
+      await auth.changePassword(
+        { currentPassword: v.currentPassword ?? "", newPassword: v.newPassword },
+        "/auth/change-password"
+      )
+      toast.success("Mot de passe mis à jour")
+      securityForm.reset({ ...securityForm.getValues(), currentPassword: "", newPassword: "", confirmPassword: "" })
     } catch (e: any) {
-      toast.error(e?.message ?? "Échec de la mise à jour de la sécurité.")
+      toast.error(e?.message ?? "Échec de la mise à jour.")
+    } finally {
+      setSavingSecurity(false)
+    }
+  }
+
+  const onToggleTwoFA = async (enabled: boolean) => {
+    securityForm.setValue("twoFA", enabled)
+    try {
+      await auth.setTwoFA({ enabled }, "/auth/toggle-2fa")
+      toast.success(enabled ? "2FA activée" : "2FA désactivée")
+    } catch (e: any) {
+      securityForm.setValue("twoFA", !enabled)
+      toast.error(e?.message ?? "Échec de la mise à jour 2FA.")
     }
   }
 
@@ -344,20 +344,12 @@ export default function MyAccount() {
                   </div>
                   <div className="space-y-2">
                     <Label>Rôle</Label>
-                    <Select
-                      defaultValue={profileForm.getValues("role") || "Admin"}
-                      onValueChange={(v) => profileForm.setValue("role", v, { shouldDirty: true })}
-                    >
-                      <SelectTrigger disabled={loading}>
-                        <SelectValue placeholder="Sélectionner un rôle" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Admin">Administrateur</SelectItem>
-                        <SelectItem value="Manager">Manager</SelectItem>
-                        <SelectItem value="Agent">Agent de guichet</SelectItem>
-                        <SelectItem value="Driver">Chauffeur</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      readOnly
+                      disabled
+                      value={profileForm.watch("role") || "—"}
+                      className="capitalize bg-muted/50"
+                    />
                   </div>
                   {/* Hidden but kept in form so avatar url is persisted */}
                   <input type="hidden" {...profileForm.register("avatarUrl")} />
@@ -366,8 +358,8 @@ export default function MyAccount() {
             </CardContent>
 
             <CardFooter className="justify-end">
-              <Button disabled={loading} onClick={profileForm.handleSubmit(onSaveProfile)}>
-                Enregistrer
+              <Button disabled={loading || savingProfile} onClick={profileForm.handleSubmit(onSaveProfile)}>
+                {savingProfile ? "Enregistrement…" : "Enregistrer"}
               </Button>
             </CardFooter>
           </Card>
@@ -555,8 +547,12 @@ export default function MyAccount() {
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <Button variant="outline" onClick={securityForm.handleSubmit(onSaveSecurity)}>
-                    Mettre à jour le mot de passe
+                  <Button
+                    variant="outline"
+                    disabled={savingSecurity}
+                    onClick={securityForm.handleSubmit(onChangePassword)}
+                  >
+                    {savingSecurity ? "Mise à jour…" : "Mettre à jour le mot de passe"}
                   </Button>
                 </div>
               </section>
@@ -572,7 +568,7 @@ export default function MyAccount() {
                   </div>
                   <Switch
                     checked={securityForm.watch("twoFA")}
-                    onCheckedChange={(v) => securityForm.setValue("twoFA", v, { shouldDirty: true })}
+                    onCheckedChange={onToggleTwoFA}
                   />
                 </div>
                 <Alert>

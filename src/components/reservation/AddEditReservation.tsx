@@ -252,22 +252,22 @@ export function MultiSelectBuses({ value, onChange, options, placeholder = "Sél
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[480px] p-0" align="start">
-        <div className="flex flex-col">
+        <Command>
           <div className="sticky top-0 z-10 p-2 border-b bg-popover/80 backdrop-blur">
-            <Command><CommandInput placeholder="Chercher un bus..." /></Command>
+            <CommandInput placeholder="Chercher un bus..." />
             <div className="grid grid-cols-3 gap-2 mt-2">
               {(["all", "hiace", "coaster"] as const).map(k => <button key={k} type="button" onClick={() => setFilter(k)} className={cn("rounded-md border px-2 py-1 text-xs capitalize", filter === k ? "bg-primary text-primary-foreground" : "hover:bg-accent")}>{k}</button>)}
             </div>
           </div>
           <div className="max-h-[320px] overflow-auto">
-            <Command><CommandList><CommandEmpty>Aucun résultat.</CommandEmpty><CommandGroup>
+            <CommandList><CommandEmpty>Aucun résultat.</CommandEmpty><CommandGroup>
               {filtered.map((opt) => <CommandItem key={opt.value} value={`${opt.label} ${opt.type ?? ""}`} onSelect={() => toggle(opt.value)} className="flex justify-between">
                 <div className="flex items-center gap-2">{opt.type && <Badge variant="outline" className="capitalize">{opt.type}</Badge>}<span>{opt.label}</span></div>
                 {selected.has(opt.value) && <span className="text-xs text-primary">Sélectionné</span>}
               </CommandItem>)}
-            </CommandGroup></CommandList></Command>
+            </CommandGroup></CommandList>
           </div>
-        </div>
+        </Command>
       </PopoverContent>
     </Popover>
   )
@@ -282,11 +282,23 @@ function toIsoLocal(d: Date) {
   const abs = Math.abs(offsetMin); const oh = pad(Math.floor(abs / 60)); const om = pad(abs % 60)
   return `${y}-${m}-${day}T${hh}:${mm}:${ss}${sign}${oh}:${om}`
 }
+function safeParseDate(iso?: string): Date {
+  if (!iso) return new Date()
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? new Date() : d
+}
+
 export function TripDateTimePicker({ valueIso, onChange }: { valueIso?: string; onChange: (iso: string) => void }) {
   const [open, setOpen] = React.useState(false)
-  const initial = React.useMemo(() => (valueIso ? new Date(valueIso) : new Date()), [valueIso])
-  const [date, setDate] = React.useState<Date>(initial)
-  const [time, setTime] = React.useState<string>(format(initial, "HH:mm"))
+  const [date, setDate] = React.useState<Date>(() => safeParseDate(valueIso))
+  const [time, setTime] = React.useState<string>(() => format(safeParseDate(valueIso), "HH:mm"))
+
+  // Sync when dialog reopens with a different reservation
+  React.useEffect(() => {
+    const d = safeParseDate(valueIso)
+    setDate(d)
+    setTime(format(d, "HH:mm"))
+  }, [valueIso])
   
   function apply(nextDate?: Date, nextTime?: string) {
     const d = new Date(nextDate ?? date); const [hh, mm] = (nextTime ?? time).split(":").map(Number)
@@ -429,11 +441,15 @@ export default function AddEditReservationDialog({ open, onOpenChange, editing, 
     
     // Init Waypoints
     const wps = (editing as any)?.waypoints as Waypoint[] | undefined
-    if (wps?.length) {
+    const hasRealCoords = wps?.some((w) => (w.lat ?? 0) !== 0 || (w.lng ?? 0) !== 0)
+    if (wps?.length && hasRealCoords) {
       setWaypoints(wps)
-      setUseMap(true) // Auto-enable map if waypoints exist
+      setUseMap(true)
     } else {
-      setWaypoints([])
+      // Manual mode: pre-populate from/to so inputs aren't blank when editing
+      const from = editing?.route?.from ?? ""
+      const to = editing?.route?.to ?? ""
+      setWaypoints([{ label: from }, { label: to }])
       setUseMap(false)
     }
 
@@ -449,7 +465,8 @@ export default function AddEditReservationDialog({ open, onOpenChange, editing, 
       setHiaceCount(0)
       setCoasterCount(0)
     }
-  }, [editing, open, busTypeIndex])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, open])
 
   function setField<K extends keyof Reservation>(key: K, val: Reservation[K]) { setForm((prev) => ({ ...prev, [key]: val })) }
   function setNested(path: string, val: string) {
